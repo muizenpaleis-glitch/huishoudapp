@@ -1,28 +1,44 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { seedDatabase } from "@/lib/seed-data";
+import { seedDatabase, seedHuis } from "@/lib/seed-data";
 
 // One-time setup: fills the database with starting data (household members,
-// example contracts, onderhoud items, finance figures). Safe to visit more
-// than once — it refuses to run if there's already real data, so it can't
-// wipe anything by accident.
+// example contracts, onderhoud items, finance figures, Huis demo data).
+// Safe to visit more than once:
+// - on a brand new database, it seeds everything
+// - on a database that already has real household data but is missing the
+//   newer Huis tables (e.g. right after this module was added), it backfills
+//   just those, leaving your real data untouched
+// - once both are present, it refuses to run again
 export async function GET(req: Request) {
   const secret = new URL(req.url).searchParams.get("secret");
   if (!process.env.SETUP_SECRET || secret !== process.env.SETUP_SECRET) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const existing = await prisma.householdMember.count();
-  if (existing > 0) {
+  const [members, huisLampen] = await Promise.all([
+    prisma.householdMember.count(),
+    prisma.huisLamp.count(),
+  ]);
+
+  if (members === 0) {
+    await seedDatabase(prisma);
     return NextResponse.json({
       ok: true,
-      message: "Er staat al data in de database — er is niets veranderd.",
+      message: "Klaar! De app is gevuld met startgegevens. Je kunt deze pagina nu sluiten.",
     });
   }
 
-  await seedDatabase(prisma);
+  if (huisLampen === 0) {
+    await seedHuis(prisma);
+    return NextResponse.json({
+      ok: true,
+      message: "Klaar! De Huis-module is gevuld met voorbeelddata. Je bestaande gegevens zijn niet aangeraakt.",
+    });
+  }
+
   return NextResponse.json({
     ok: true,
-    message: "Klaar! De app is gevuld met startgegevens. Je kunt deze pagina nu sluiten.",
+    message: "Er staat al data in de database — er is niets veranderd.",
   });
 }

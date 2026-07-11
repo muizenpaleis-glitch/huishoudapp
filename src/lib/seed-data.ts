@@ -1,15 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 
 export async function seedDatabase(prisma: PrismaClient) {
-  // ── Huis ──
-  await prisma.huisFavoriet.deleteMany();
-  await prisma.huisLaadSessie.deleteMany();
-  await prisma.huisLaadpaal.deleteMany();
-  await prisma.huisAutomatisering.deleteMany();
-  await prisma.huisEnergieMeting.deleteMany();
-  await prisma.huisEnergieStatus.deleteMany();
-  await prisma.huisCamera.deleteMany();
-  await prisma.huisLamp.deleteMany();
+  await seedHuis(prisma);
 
   // ── Huishouden ──
   await prisma.subtaak.deleteMany();
@@ -311,7 +303,23 @@ export async function seedDatabase(prisma: PrismaClient) {
     });
   }
 
-  // ── Huis (demo data — no live Home Assistant connection yet) ──
+  // Huis is seeded independently — see seedHuis() below.
+}
+
+// Demo data for the Huis module — no live Home Assistant connection yet.
+// Kept separate from seedDatabase() so it can be (re)run on its own: a
+// deploy that adds the Huis tables to an already-seeded production database
+// needs to backfill just these rows without touching real household data.
+export async function seedHuis(prisma: PrismaClient) {
+  await prisma.huisFavoriet.deleteMany();
+  await prisma.huisLaadSessie.deleteMany();
+  await prisma.huisLaadpaal.deleteMany();
+  await prisma.huisAutomatisering.deleteMany();
+  await prisma.huisEnergieMeting.deleteMany();
+  await prisma.huisEnergieStatus.deleteMany();
+  await prisma.huisCamera.deleteMany();
+  await prisma.huisLamp.deleteMany();
+
   const lampen = [
     { id: "vloerlamp", naam: "Vloerlamp", kamer: "Woonkamer", aan: true, helderheid: 70, kleurTemp: "warm" as const },
     { id: "leeslamp", naam: "Leeslamp", kamer: "Woonkamer", aan: false, helderheid: 40, kleurTemp: "neutraal" as const },
