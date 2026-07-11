@@ -9,6 +9,7 @@ import {
   ContractenIcon,
   OnderhoudIcon,
   FinancienIcon,
+  HuisIcon,
   SettingsIcon,
 } from "@/components/icons";
 
@@ -16,6 +17,7 @@ const TABS = [
   { key: "contracten", href: "/contracten", label: "Contracten", Icon: ContractenIcon },
   { key: "onderhoud", href: "/onderhoud", label: "Onderhoud", Icon: OnderhoudIcon },
   { key: "financien", href: "/financien", label: "Financiën", Icon: FinancienIcon },
+  { key: "huis", href: "/huis", label: "Huis", Icon: HuisIcon },
   { key: "instellingen", href: "/instellingen", label: "Instellingen", Icon: SettingsIcon },
 ];
 

@@ -1,6 +1,6 @@
 # Ons huis — Huishoud-app
 
-Real implementation of the "Huishoud app design" Claude Design bundle: a shared-account household app with four modules — **Contracten**, **Onderhoud**, **Financiën** and **Instellingen** (Huishouden) — built with Next.js (App Router), Prisma/PostgreSQL, and web push, as an installable PWA.
+Real implementation of the "Huishoud app design" Claude Design bundle: a shared-account household app with five modules — **Contracten**, **Onderhoud**, **Financiën**, **Huis** and **Instellingen** (Huishouden) — built with Next.js (App Router), Prisma/PostgreSQL, and web push, as an installable PWA.
 
 ## Stack
 
@@ -59,6 +59,7 @@ Two things matter most on this stack (Vercel + a serverless Postgres):
 - `src/app/(app)/contracten` — timeline overview, detail, add/edit form, notification settings, empty state
 - `src/app/(app)/onderhoud` — combined periodiek/taak overview, detail (log-a-completion, subtasks, assignment, vrije inhoud), bundled to-do view
 - `src/app/(app)/financien` — mobile read-only / desktop-editable dashboard (KPIs, net worth, MJP projection, budgets, CSV-import placeholder, transaction triage, "Vraag je cijfers" chat)
+- `src/app/(app)/huis` — Home Assistant-style dashboard: favorites (long-press to pin/reorder), lighting grouped by room, energy (live stats, usage/generation chart, EV charger, manual solar-surplus actions), cameras. **Demo data only for now — not connected to a real Home Assistant instance.** See "Huis module" below.
 - `src/app/(app)/instellingen` — app-wide settings, Huishouden member management, per-device "Jij" preference (stored in `localStorage`, not the database — there are no separate logins)
 - `src/lib/*` — pure business logic (urgency/color calculations, formatting) shared between server and client
 - `prisma/schema.prisma` / `prisma/seed.ts` — data model and the realistic NL seed data ported from the design prototypes
@@ -72,6 +73,12 @@ Web push is wired end to end:
 - `/api/notifications/check?secret=...` — scans contracts/onderhoud items nearing their deadline and sends push notifications (de-duplicated via `NotificationLog`, cooldown 3 days)
 
 This last endpoint needs to be triggered on a schedule (e.g. a Vercel Cron job or any external scheduler hitting it daily) — set `NOTIFICATIONS_CRON_SECRET` in your environment and configure the scheduler to send it as `?secret=` or an `x-cron-secret` header. VAPID keys live in `.env` (`NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`, generated with `npx web-push generate-vapid-keys`) — replace them for a real deployment.
+
+## Huis module
+
+The Huis dashboard (lights, energy, EV charger, cameras) currently runs on **demo data only** — it is not wired up to a real Home Assistant instance. This was a deliberate scope decision: connecting it for real needs a Nabu Casa remote URL, a long-lived access token, and the actual entity IDs of your devices, none of which were available when this pass was built. The solar-surplus automation is manual-only on purpose too (the "Boost warmwater nu" / "Auto nu laden" buttons just record the action) — the requirements doc itself flags the data source and execution location for a fully automatic version as unresolved, and an unattended loop that decides when to charge an EV or heat water isn't something to guess at.
+
+When you're ready to connect it for real: give the Nabu Casa URL, an access token, and your entity IDs, and a later pass can wire `HuisLamp`/`HuisCamera`/`HuisLaadpaal`/`HuisAutomatisering` up to Home Assistant's WebSocket/REST API instead of Postgres-backed demo rows.
 
 ## Known scope decisions
 

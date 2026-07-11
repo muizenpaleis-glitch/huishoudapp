@@ -267,3 +267,88 @@ model FinanceTransactie {
 
   createdAt      DateTime          @default(now())
 }
+
+// ───────────────────────── Huis (Home Assistant) ─────────────────────────
+// Demo data for now — no live Home Assistant connection yet. Structured so a
+// later pass can map each row onto a real HA entity_id without a schema
+// change (see README).
+
+enum KleurTemp {
+  warm
+  neutraal
+  koel
+}
+
+model HuisLamp {
+  id         String    @id @default(cuid())
+  naam       String
+  kamer      String
+  aan        Boolean   @default(false)
+  helderheid Int       @default(50)
+  kleurTemp  KleurTemp @default(neutraal)
+  volgorde   Int       @default(0)
+}
+
+model HuisCamera {
+  id              String    @id @default(cuid())
+  naam            String
+  laatsteBeweging DateTime?
+  volgorde        Int       @default(0)
+}
+
+enum LaadpaalStatus {
+  vrij
+  laden
+  gepauzeerd
+  klaar
+}
+
+model HuisLaadpaal {
+  id               Int              @id @default(1)
+  status           LaadpaalStatus   @default(vrij)
+  huidigVermogenKw Decimal          @db.Decimal(5, 2) @default(0)
+  sessies          HuisLaadSessie[]
+}
+
+model HuisLaadSessie {
+  id          String       @id @default(cuid())
+  laadpaalId  Int          @default(1)
+  laadpaal    HuisLaadpaal @relation(fields: [laadpaalId], references: [id], onDelete: Cascade)
+  datum       DateTime
+  duurMinuten Int
+  kwh         Decimal      @db.Decimal(5, 2)
+}
+
+model HuisAutomatisering {
+  id             Int       @id @default(1)
+  aan            Boolean   @default(true)
+  laatsteActie   String?
+  laatsteActieOp DateTime?
+}
+
+model HuisEnergieStatus {
+  id                        Int     @id @default(1)
+  verbruikNuKw              Decimal @db.Decimal(5, 2) @default(0)
+  opwekNuKw                 Decimal @db.Decimal(5, 2) @default(0)
+  terugleveringNuKw         Decimal @db.Decimal(5, 2) @default(0)
+  verbruikVandaagKwh        Decimal @db.Decimal(6, 2) @default(0)
+  opwekVandaagKwh           Decimal @db.Decimal(6, 2) @default(0)
+  teruggeleverdVandaagKwh   Decimal @db.Decimal(6, 2) @default(0)
+  warmtepompVandaagKwh      Decimal @db.Decimal(5, 2) @default(0)
+  warmtepompBijgewerkt      DateTime?
+}
+
+model HuisEnergieMeting {
+  id       String  @id @default(cuid())
+  periode  String  // 'dag' | 'week' | 'maand'
+  label    String  // '00u', 'Ma', 'Wk 1', ...
+  verbruik Decimal @db.Decimal(6, 2)
+  opwek    Decimal @db.Decimal(6, 2)
+  volgorde Int     @default(0)
+}
+
+model HuisFavoriet {
+  id       String @id @default(cuid())
+  key      String @unique // 'lamp:<id>' | 'laadpaal' | 'automatisering'
+  volgorde Int    @default(0)
+}
