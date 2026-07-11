@@ -29,6 +29,19 @@ Real implementation of the "Huishoud app design" Claude Design bundle: a shared-
 
    Open [http://localhost:3000](http://localhost:3000) (redirects to `/contracten`).
 
+## Deploy for free (no terminal needed)
+
+The easiest way to get a real, permanent link you can open on your phone:
+
+1. Go to [vercel.com](https://vercel.com) and sign in with the GitHub account this repo lives in.
+2. Click **Add New → Project**, pick this repo, and click **Deploy**. Before it finishes, add these environment variables in the Vercel project settings (Settings → Environment Variables):
+   - `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` — generate with `npx web-push generate-vapid-keys` (or ask whoever set this up to run it once)
+   - `NOTIFICATIONS_CRON_SECRET` — any random password you choose
+   - `SETUP_SECRET` — any random password you choose (used once, see step 4)
+3. In the same project, go to **Storage → Create Database → Postgres** and connect it — Vercel will automatically add `DATABASE_URL` for you. Redeploy once it's connected (migrations run automatically as part of every deploy).
+4. Once deployed, visit `https://<your-app>.vercel.app/api/setup?secret=<the SETUP_SECRET you chose>` **once** in your browser. This fills the database with starting data. Visiting it again is harmless — it refuses to run a second time once there's real data.
+5. Open `https://<your-app>.vercel.app` — that's your app. On a phone, open it in the browser and choose "Add to Home Screen" to install it like a normal app.
+
 ## Project layout
 
 - `src/app/(app)/contracten` — timeline overview, detail, add/edit form, notification settings, empty state
