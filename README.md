@@ -72,7 +72,9 @@ Web push is wired end to end:
 - `/api/push/subscribe`, `/api/push/unsubscribe` — store/remove browser subscriptions
 - `/api/notifications/check?secret=...` — scans contracts/onderhoud items nearing their deadline and sends push notifications (de-duplicated via `NotificationLog`, cooldown 3 days)
 
-This last endpoint needs to be triggered on a schedule (e.g. a Vercel Cron job or any external scheduler hitting it daily) — set `NOTIFICATIONS_CRON_SECRET` in your environment and configure the scheduler to send it as `?secret=` or an `x-cron-secret` header. VAPID keys live in `.env` (`NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`, generated with `npx web-push generate-vapid-keys`) — replace them for a real deployment.
+The check endpoint runs automatically once a day on Vercel: `vercel.json` defines a cron job for `/api/notifications/check`, and Vercel authenticates it by sending `Authorization: Bearer <CRON_SECRET>` — so **set a `CRON_SECRET` environment variable** (any random value) in the Vercel project for the cron to be accepted. Manual/external triggering also works via `?secret=` or an `x-cron-secret` header matching `NOTIFICATIONS_CRON_SECRET`. VAPID keys live in `.env` (`NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`, generated with `npx web-push generate-vapid-keys`) — replace them for a real deployment.
+
+For pushes to actually arrive on a phone: install the app (Add to Home Screen), open Contracten → bell icon (or Onderhoud → bell icon), enable "Push op telefoon", and accept the browser's notification permission prompt. The "In de app"/mail toggles are UI-only for now — the delivered channel is web push.
 
 ## Huis module
 

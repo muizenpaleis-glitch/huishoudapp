@@ -23,8 +23,16 @@ async function markNotified(key: string) {
 }
 
 export async function GET(req: Request) {
+  // Two accepted callers: Vercel Cron (Authorization: Bearer <CRON_SECRET>,
+  // added automatically when the CRON_SECRET env var is set) and manual
+  // invocations with ?secret= / x-cron-secret using NOTIFICATIONS_CRON_SECRET.
+  const bearer = req.headers.get("authorization");
+  const viaVercelCron =
+    !!process.env.CRON_SECRET && bearer === `Bearer ${process.env.CRON_SECRET}`;
   const secret = req.headers.get("x-cron-secret") || new URL(req.url).searchParams.get("secret");
-  if (!process.env.NOTIFICATIONS_CRON_SECRET || secret !== process.env.NOTIFICATIONS_CRON_SECRET) {
+  const viaSecret =
+    !!process.env.NOTIFICATIONS_CRON_SECRET && secret === process.env.NOTIFICATIONS_CRON_SECRET;
+  if (!viaVercelCron && !viaSecret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

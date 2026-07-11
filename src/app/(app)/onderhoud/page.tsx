@@ -88,7 +88,7 @@ export default async function OnderhoudPage({
                 </div>
               )}
             </div>
-            <RoundIconButton>
+            <RoundIconButton href="/onderhoud/instellingen">
               <BellIcon size={18} />
             </RoundIconButton>
           </div>

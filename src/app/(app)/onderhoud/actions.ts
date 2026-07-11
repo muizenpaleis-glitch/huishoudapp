@@ -106,3 +106,17 @@ export async function createOnderhoudItem(values: OnderhoudFormValues) {
   refresh();
   redirect(`/onderhoud/${created.id}`);
 }
+
+export async function updateOnderhoudNotificaties(values: {
+  onderhoudDrempel: number;
+  contractPush: boolean;
+}) {
+  await prisma.appSettings.upsert({
+    where: { id: 1 },
+    update: values,
+    create: { id: 1, contractDrempel: 60, contractMail: true, ...values },
+  });
+  revalidatePath("/onderhoud");
+  revalidatePath("/onderhoud/instellingen");
+  revalidatePath("/contracten/instellingen");
+}
