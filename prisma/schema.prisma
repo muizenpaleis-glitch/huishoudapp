@@ -1,0 +1,269 @@
+// Huishoud-app database schema
+// Covers: Huishouden (household members), Contracten, Onderhoud, Financien
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Huishouden ─────────────────────────
+
+model HouseholdMember {
+  id        String   @id @default(cuid())
+  naam      String
+  email     String?
+  kleur     String
+  createdAt DateTime @default(now())
+
+  contracten           Contract[]
+  onderhoudSubtaken    Subtaak[]
+  onderhoudToegewezen  OnderhoudItem[] @relation("Toegewezen")
+  pushSubscriptions    PushSubscription[]
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  memberId  String?
+  member    HouseholdMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+}
+
+model AppSettings {
+  id                Int     @id @default(1)
+  contractDrempel   Int     @default(60)
+  contractMail      Boolean @default(true)
+  contractPush      Boolean @default(false)
+  onderhoudDrempel  Int     @default(14)
+}
+
+// Dedupe log so the reminder check doesn't re-send the same push every run.
+model NotificationLog {
+  key    String   @id // e.g. "contract:<id>" or "onderhoud:<id>"
+  sentAt DateTime @default(now())
+}
+
+// ───────────────────────── Contracten ─────────────────────────
+
+enum ContractCategorie {
+  Energie
+  Verzekering
+  Abonnement
+  Overig
+}
+
+enum ContractStatus {
+  Actief
+  Opgezegd
+  Verlopen
+}
+
+enum OpzegType {
+  periode
+  datum
+}
+
+model Contract {
+  id            String            @id @default(cuid())
+  naam          String
+  leverancier   String
+  categorie     ContractCategorie
+  startdatum    DateTime?
+  einddatum     DateTime
+  opzegType     OpzegType         @default(periode)
+  opzegMaanden  Int               @default(1)
+  opzegDatum    DateTime?
+  autoRenewal   Boolean           @default(true)
+  status        ContractStatus    @default(Actief)
+  docNaam       String?
+  beheerderId   String?
+  beheerder     HouseholdMember?  @relation(fields: [beheerderId], references: [id], onDelete: SetNull)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+}
+
+// ───────────────────────── Onderhoud ─────────────────────────
+
+enum OnderhoudType {
+  periodiek
+  taak
+}
+
+enum OnderhoudCategorie {
+  Huis
+  Apparaten
+  Auto
+  Tuin
+  Overig
+}
+
+enum OnderhoudPrioriteit {
+  Hoog
+  Gemiddeld
+  Laag
+}
+
+enum TaakStatus {
+  Te_doen   @map("Te doen")
+  Mee_bezig @map("Mee bezig")
+  Klaar
+}
+
+model OnderhoudItem {
+  id               String               @id @default(cuid())
+  type             OnderhoudType
+  naam             String
+  categorie        OnderhoudCategorie
+  prio             OnderhoudPrioriteit
+  doc              String?
+  notitie          String?
+  notitieKort      String?
+
+  // periodiek-specific
+  intervalMaanden  Int?
+  intervalLabel    String?
+  volgende         DateTime?
+
+  // taak-specific
+  status           TaakStatus?
+  streefdatum      DateTime?
+  toegewezenId     String?
+  toegewezen       HouseholdMember?     @relation("Toegewezen", fields: [toegewezenId], references: [id], onDelete: SetNull)
+
+  logs             OnderhoudLog[]
+  subtaken         Subtaak[]
+  vrijeInhoud      VrijeInhoudBlok[]
+
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+}
+
+model OnderhoudLog {
+  id       String        @id @default(cuid())
+  itemId   String
+  item     OnderhoudItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  datum    DateTime
+  notitie  String?
+  doc      String?
+}
+
+model Subtaak {
+  id            String        @id @default(cuid())
+  itemId        String
+  item          OnderhoudItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tekst         String
+  klaar         Boolean       @default(false)
+  toegewezenId  String?
+  toegewezen    HouseholdMember? @relation(fields: [toegewezenId], references: [id], onDelete: SetNull)
+  volgorde      Int           @default(0)
+}
+
+enum VrijeInhoudKind {
+  tekst
+  foto
+}
+
+model VrijeInhoudBlok {
+  id         String          @id @default(cuid())
+  itemId     String
+  item       OnderhoudItem   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  kind       VrijeInhoudKind
+  volgorde   Int             @default(0)
+  tekst      String?
+  imageUrl   String?
+  label      String?
+}
+
+// ───────────────────────── Financien ─────────────────────────
+
+enum TransactieKlasse {
+  recurring
+  yearly
+  incidental
+  exclude
+}
+
+model FinanceNetWorth {
+  id             Int     @id @default(1)
+  buffer         Decimal @db.Decimal(12, 2)
+  spaargeld      Decimal @db.Decimal(12, 2)
+  beleggingen    Decimal @db.Decimal(12, 2)
+  startVermogen  Decimal @db.Decimal(12, 2)
+  kritiekeGrens  Decimal @db.Decimal(12, 2)
+  incomeMaand    Decimal @db.Decimal(12, 2)
+  spendBudgetMaand Decimal @db.Decimal(12, 2)
+  spendActualMaand Decimal @db.Decimal(12, 2)
+}
+
+model FinanceMjpResultaat {
+  jaar          Int     @id
+  opResultaat   Decimal @db.Decimal(12, 2)
+}
+
+model FinanceMaandFactor {
+  maand   String  @id // 'YYYY-MM'
+  kort    String
+  lang    String
+  factor  Decimal @db.Decimal(4, 2)
+}
+
+model FinanceCategorieBudget {
+  id                String   @id @default(cuid())
+  label             String   @unique
+  budgetMaandelijks Decimal  @db.Decimal(12, 2)
+  actualMaandelijks Decimal  @db.Decimal(12, 2)
+  kleur             String?
+  vast              Boolean  @default(false)
+  volgorde          Int      @default(0)
+  inSpendOverzicht  Boolean  @default(false)
+  inBudgetOverzicht Boolean  @default(false)
+
+  transacties FinanceTransactie[]
+}
+
+model FinanceIncidenteelProject {
+  id       String   @id @default(cuid())
+  naam     String
+  budget   Decimal  @db.Decimal(12, 2)
+  jaar     Int
+  done     Boolean  @default(false)
+  besteed  Decimal  @db.Decimal(12, 2) @default(0)
+
+  transacties FinanceTransactie[]
+}
+
+model FinanceJaarlijksItem {
+  id                String   @id @default(cuid())
+  naam              String
+  budgetJaarlijks   Decimal  @db.Decimal(12, 2)
+  besteed2026       Decimal  @db.Decimal(12, 2) @default(0)
+
+  transacties FinanceTransactie[]
+}
+
+model FinanceTransactie {
+  id             String            @id @default(cuid())
+  datum          DateTime
+  naam           String
+  omschrijving   String
+  bankCategorie  String
+  bedrag         Decimal           @db.Decimal(12, 2)
+  klasse         TransactieKlasse
+
+  categorieBudgetId String?
+  categorieBudget   FinanceCategorieBudget? @relation(fields: [categorieBudgetId], references: [id], onDelete: SetNull)
+
+  projectId      String?
+  project        FinanceIncidenteelProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  jaarlijksItemId String?
+  jaarlijksItem   FinanceJaarlijksItem? @relation(fields: [jaarlijksItemId], references: [id], onDelete: SetNull)
+
+  createdAt      DateTime          @default(now())
+}
