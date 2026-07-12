@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { BackButton, Pill, Toggle, PrimaryButton, Avatar } from "@/components/ui";
 import { CONTRACT_CATEGORIEEN } from "@/lib/contracten";
 import { toDateInputValue, fmtKort } from "@/lib/format";
-import { saveContract, type ContractFormValues } from "./actions";
+import { saveContract, deleteContract, type ContractFormValues } from "./actions";
 import { FileUpload } from "@/components/FileUpload";
 import { QuickAddMember } from "@/components/QuickAddMember";
 import type { Contract, ContractStatus } from "@/generated/prisma/client";
@@ -57,6 +57,14 @@ export function ContractForm({ contract, members }: { contract?: Contract; membe
     };
     startTransition(async () => {
       await saveContract(contract?.id ?? null, values);
+    });
+  }
+
+  function onDelete() {
+    if (!contract) return;
+    if (!confirm(`Weet je zeker dat je "${contract.naam}" wilt verwijderen?`)) return;
+    startTransition(async () => {
+      await deleteContract(contract.id);
     });
   }
 
@@ -218,6 +226,17 @@ export function ContractForm({ contract, members }: { contract?: Contract; membe
           <PrimaryButton type="submit" className="mt-1.5 w-full" disabled={pending}>
             {contract ? "Wijzigingen opslaan" : "Contract toevoegen"}
           </PrimaryButton>
+
+          {contract && (
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={pending}
+              className="text-center text-[13.5px] font-semibold text-danger py-2"
+            >
+              Contract verwijderen
+            </button>
+          )}
         </div>
       </form>
       <style jsx global>{`

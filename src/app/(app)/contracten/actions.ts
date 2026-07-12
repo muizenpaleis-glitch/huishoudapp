@@ -54,6 +54,12 @@ export async function saveContract(id: string | null, values: ContractFormValues
   redirect(`/contracten/${contractId}`);
 }
 
+export async function deleteContract(id: string) {
+  await prisma.contract.delete({ where: { id } });
+  revalidatePath("/contracten");
+  redirect("/contracten");
+}
+
 export async function updateStatus(id: string, status: ContractStatus) {
   await prisma.contract.update({ where: { id }, data: { status } });
   revalidatePath("/contracten");

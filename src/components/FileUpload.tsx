@@ -4,6 +4,32 @@ import { useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import { DocIcon, CameraIcon, TrashIcon } from "@/components/icons";
 
+// Camera photos (esp. HEIC/JPEG from phones) can be 8-12MB, which feels like
+// a hang on mobile networks. Downscale + re-encode as JPEG before upload.
+// Falls back to the original file on any decode error (e.g. HEIC in Chrome).
+async function compressImage(file: File, maxDim = 1600, quality = 0.82): Promise<File> {
+  if (!file.type.startsWith("image/") || file.type === "image/gif") return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    if (scale >= 1 && file.size < 1.5 * 1024 * 1024) return file;
+    const w = Math.round(bitmap.width * scale);
+    const h = Math.round(bitmap.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (!blob) return file;
+    const newName = file.name.replace(/\.\w+$/, "") + ".jpg";
+    return new File([blob], newName, { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
 export function FileUpload({
   naam,
   url,
@@ -20,15 +46,20 @@ export function FileUpload({
   const pickRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  async function upload_(file: File) {
+  async function upload_(rawFile: File) {
     setBusy(true);
+    setProgress(0);
     setError(null);
     try {
+      const file = await compressImage(rawFile);
       const blob = await upload(file.name, file, {
         access: "public",
         handleUploadUrl: "/api/upload",
+        multipart: true,
+        onUploadProgress: ({ percentage }) => setProgress(percentage),
       });
       onChange(file.name, blob.url);
     } catch (err) {
@@ -84,7 +115,7 @@ export function FileUpload({
         disabled={busy}
         className="border-[1.5px] border-dashed border-input-border rounded-2xl p-4.5 text-center text-[13.5px] text-muted disabled:opacity-60"
       >
-        {busy ? "Uploaden…" : emptyLabel}
+        {busy ? `Uploaden… ${progress > 0 ? Math.round(progress) + "%" : ""}` : emptyLabel}
       </button>
 
       {cameraCapture && (
