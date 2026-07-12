@@ -94,10 +94,11 @@ Data layer lives in `src/lib/google-calendar.ts` (auth + Calendar REST calls), t
 2. In **APIs & Services → Library**, search **Google Calendar API** and click **Enable**.
 3. In **APIs & Services → Credentials → Create credentials → Service account**, make one (any name, no roles needed). Open it → **Keys → Add key → Create new key → JSON**, and download the file.
 4. Open Google Calendar in a browser → the calendar you want to use (e.g. **Gezin**) → **Settings and sharing → Share with specific people → Add people**, paste the service account's email (ends in `…iam.gserviceaccount.com`), and give it **"Make changes to events"**. Copy the calendar's **Calendar ID** from the same settings page.
-5. In Vercel (**Settings → Environment Variables**), add three variables from the downloaded JSON + step 4:
-   - `GOOGLE_SERVICE_ACCOUNT_EMAIL` — the JSON's `client_email`
-   - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` — the JSON's `private_key` (paste it exactly, including the `-----BEGIN…` lines; the `\n`s are handled automatically)
-   - `GOOGLE_CALENDAR_ID` — the Calendar ID from step 4
+5. In Vercel (**Settings → Environment Variables**), add two variables:
+   - `GOOGLE_SERVICE_ACCOUNT_KEY` — paste the **entire contents** of the downloaded JSON file (open it in a text editor, select all, copy).
+   - `GOOGLE_CALENDAR_ID` — the Calendar ID from step 4.
+
+   (Advanced alternative: instead of the combined key you may set `GOOGLE_SERVICE_ACCOUNT_EMAIL` + `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` separately.)
 6. Redeploy. The Agenda tab now shows the real calendar and edits sync straight back to Google (and to everyone's phones).
 
 ## Known scope decisions

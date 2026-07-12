@@ -17,10 +17,26 @@ export const TIME_ZONE = "Europe/Amsterdam";
 const SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
 
 function getConfig() {
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  if (!calendarId) return null;
+
+  // Preferred: paste the entire downloaded service-account JSON into one var.
+  const blob = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  if (blob) {
+    try {
+      const parsed = JSON.parse(blob) as { client_email?: string; private_key?: string };
+      if (parsed.client_email && parsed.private_key) {
+        return { email: parsed.client_email, key: parsed.private_key.replace(/\\n/g, "\n"), calendarId };
+      }
+    } catch {
+      // fall through to the split-variable form below
+    }
+  }
+
+  // Alternative: the two fields provided separately.
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
-  const calendarId = process.env.GOOGLE_CALENDAR_ID;
-  if (!email || !rawKey || !calendarId) return null;
+  if (!email || !rawKey) return null;
   return { email, key: rawKey.replace(/\\n/g, "\n"), calendarId };
 }
 
