@@ -5,9 +5,8 @@ import { BackButton, PrimaryButton } from "@/components/ui";
 import { CheckIcon } from "@/components/icons";
 import { useActiveMember } from "@/components/ActiveMemberContext";
 import { saveLid, deleteLid } from "../actions";
+import { LID_KLEUREN as KLEUREN } from "@/lib/colors";
 import type { HouseholdMember } from "@/generated/prisma/client";
-
-const KLEUREN = ["#C4633B", "#5C7F55", "#6C5B8C", "#A9761C", "#2F6E8F"];
 
 export function LidForm({
   member,

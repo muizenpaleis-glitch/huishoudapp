@@ -78,6 +78,9 @@ export type OnderhoudFormValues = {
   volgende: string;
   streefdatum: string;
   toegewezenId: string;
+  doc: string;
+  docUrl: string;
+  notitie: string;
 };
 
 export async function createOnderhoudItem(values: OnderhoudFormValues) {
@@ -92,6 +95,9 @@ export async function createOnderhoudItem(values: OnderhoudFormValues) {
           intervalMaanden: values.intervalMaanden,
           intervalLabel: intervalLabel(values.intervalMaanden),
           volgende: values.volgende ? new Date(values.volgende) : new Date(),
+          doc: values.doc || null,
+          docUrl: values.docUrl || null,
+          notitie: values.notitie || null,
         }
       : {
           type: "taak" as const,
@@ -101,10 +107,43 @@ export async function createOnderhoudItem(values: OnderhoudFormValues) {
           status: "Te_doen" as const,
           streefdatum: values.streefdatum ? new Date(values.streefdatum) : null,
           toegewezenId: values.toegewezenId || null,
+          doc: values.doc || null,
+          docUrl: values.docUrl || null,
+          notitie: values.notitie || null,
         };
   const created = await prisma.onderhoudItem.create({ data });
   refresh();
   redirect(`/onderhoud/${created.id}`);
+}
+
+export async function updateOnderhoudItem(id: string, values: OnderhoudFormValues) {
+  if (!values.naam.trim()) throw new Error("Naam is verplicht");
+  const data =
+    values.type === "periodiek"
+      ? {
+          naam: values.naam.trim(),
+          categorie: values.categorie,
+          prio: values.prio,
+          intervalMaanden: values.intervalMaanden,
+          intervalLabel: intervalLabel(values.intervalMaanden),
+          volgende: values.volgende ? new Date(values.volgende) : new Date(),
+          doc: values.doc || null,
+          docUrl: values.docUrl || null,
+          notitie: values.notitie || null,
+        }
+      : {
+          naam: values.naam.trim(),
+          categorie: values.categorie,
+          prio: values.prio,
+          streefdatum: values.streefdatum ? new Date(values.streefdatum) : null,
+          toegewezenId: values.toegewezenId || null,
+          doc: values.doc || null,
+          docUrl: values.docUrl || null,
+          notitie: values.notitie || null,
+        };
+  await prisma.onderhoudItem.update({ where: { id }, data });
+  refresh(id);
+  redirect(`/onderhoud/${id}`);
 }
 
 export async function updateOnderhoudNotificaties(values: {

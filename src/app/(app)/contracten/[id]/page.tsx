@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getAppSettings } from "@/lib/settings";
-import { BackButton, Card, Pill, FieldRow } from "@/components/ui";
+import { BackButton, Card, Pill, FieldRow, Avatar } from "@/components/ui";
 import { DocIcon, WarningIcon, CategorieIcons } from "@/components/icons";
 import { CATEGORIE_TINT, urgentie, urgentieKleur, deadline } from "@/lib/contracten";
 import { fmtKort, dagenTussen } from "@/lib/format";
@@ -15,7 +15,7 @@ export default async function ContractDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const contract = await prisma.contract.findUnique({ where: { id } });
+  const contract = await prisma.contract.findUnique({ where: { id }, include: { beheerder: true } });
   if (!contract) notFound();
 
   const settings = await getAppSettings();
@@ -104,24 +104,46 @@ export default async function ContractDetailPage({
           </div>
         </Card>
 
+        {contract.beheerder && (
+          <Card className="p-4.5 flex items-center gap-3">
+            <Avatar naam={contract.beheerder.naam} kleur={contract.beheerder.kleur} size={34} />
+            <div>
+              <div className="text-[13px] font-bold tracking-wider uppercase text-label">Beheerder</div>
+              <div className="text-[14.5px] font-semibold mt-0.5">{contract.beheerder.naam}</div>
+            </div>
+          </Card>
+        )}
+
         <Card className="p-4.5 flex flex-col gap-3">
           <div className="text-[13px] font-bold tracking-wider uppercase text-label">Document</div>
           {contract.docNaam ? (
-            <div className="flex items-center gap-3">
+            <a
+              href={contract.docUrl || undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3"
+            >
               <div className="w-[42px] h-[42px] rounded-[13px] bg-accent-tint flex items-center justify-center shrink-0">
                 <DocIcon size={19} className="text-accent" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold truncate">{contract.docNaam}</div>
-                <div className="text-[12.5px] text-muted">PDF · toegevoegd bij aanmaak</div>
+                <div className="text-[12.5px] text-muted">{contract.docUrl ? "Tik om te bekijken" : "Toegevoegd bij aanmaak"}</div>
               </div>
-            </div>
+            </a>
           ) : (
             <div className="border-[1.5px] border-dashed border-input-border rounded-2xl p-4.5 text-center text-[13.5px] text-muted">
               Geen document toegevoegd
             </div>
           )}
         </Card>
+
+        {contract.notitie && (
+          <Card className="p-4.5 flex flex-col gap-2">
+            <div className="text-[13px] font-bold tracking-wider uppercase text-label">Notitie</div>
+            <div className="text-[13.5px] text-ink whitespace-pre-wrap leading-relaxed">{contract.notitie}</div>
+          </Card>
+        )}
       </div>
     </div>
   );

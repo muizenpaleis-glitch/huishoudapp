@@ -27,6 +27,22 @@ export async function saveLid(id: string | null, values: LidFormValues) {
   redirect("/instellingen/huishouden");
 }
 
+// Non-redirecting variant for "quick add" flows embedded in other forms
+// (e.g. picking a contract beheerder without leaving the contract form).
+export async function quickAddLid(values: LidFormValues) {
+  if (!values.naam.trim()) throw new Error("Naam is verplicht");
+  const member = await prisma.householdMember.create({
+    data: {
+      naam: values.naam.trim(),
+      email: values.email.trim() || null,
+      kleur: values.kleur,
+    },
+  });
+  revalidatePath("/instellingen/huishouden");
+  revalidatePath("/instellingen");
+  return member;
+}
+
 export async function deleteLid(id: string) {
   const count = await prisma.householdMember.count();
   if (count <= 1) throw new Error("Het laatste lid kan niet verwijderd worden");

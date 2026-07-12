@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getMembers } from "@/lib/members";
 import { ContractForm } from "../../ContractForm";
 
 export default async function BewerkContractPage({
@@ -8,7 +9,10 @@ export default async function BewerkContractPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const contract = await prisma.contract.findUnique({ where: { id } });
+  const [contract, members] = await Promise.all([
+    prisma.contract.findUnique({ where: { id } }),
+    getMembers(),
+  ]);
   if (!contract) notFound();
-  return <ContractForm contract={contract} />;
+  return <ContractForm contract={contract} members={members} />;
 }

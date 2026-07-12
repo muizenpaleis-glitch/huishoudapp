@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getAppSettings } from "@/lib/settings";
 import { getMembers } from "@/lib/members";
@@ -53,7 +54,16 @@ export default async function OnderhoudDetailPage({
   return (
     <div className="pt-16 md:pt-6 px-5 pb-8 overflow-y-auto">
       <div className="max-w-[640px] mx-auto flex flex-col gap-4">
-        <BackButton href="/onderhoud" />
+        <div className="flex items-center gap-2">
+          <BackButton href="/onderhoud" />
+          <div className="flex-1" />
+          <Link
+            href={`/onderhoud/${id}/bewerken`}
+            className="px-4.5 py-2.5 rounded-full bg-ink text-accent-ink text-[13.5px] font-semibold"
+          >
+            Bewerken
+          </Link>
+        </div>
 
         <div className="flex items-center gap-3.5">
           <div
@@ -117,6 +127,13 @@ export default async function OnderhoudDetailPage({
                 </div>
               ))}
             </Card>
+
+            {item.notitie && (
+              <Card className="p-4.5 flex flex-col gap-2">
+                <div className="text-[13px] font-bold tracking-wider uppercase text-label">Notitie</div>
+                <div className="text-[13.5px] text-ink whitespace-pre-wrap leading-relaxed">{item.notitie}</div>
+              </Card>
+            )}
           </>
         ) : (
           <>
@@ -192,17 +209,22 @@ export default async function OnderhoudDetailPage({
         <Card className="p-4.5 flex flex-col gap-3">
           <div className="text-[13px] font-bold tracking-wider uppercase text-label">Document</div>
           {item.doc ? (
-            <div className="flex items-center gap-3">
+            <a
+              href={item.docUrl || undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3"
+            >
               <div className="w-[42px] h-[42px] rounded-[13px] bg-accent-tint flex items-center justify-center shrink-0">
                 <DocIcon size={19} className="text-accent" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold truncate">{item.doc}</div>
                 <div className="text-[12.5px] text-muted">
-                  {item.type === "periodiek" ? "Handleiding / garantiebewijs" : "Gekoppeld aan dit item"}
+                  {item.docUrl ? "Tik om te bekijken" : item.type === "periodiek" ? "Handleiding / garantiebewijs" : "Gekoppeld aan dit item"}
                 </div>
               </div>
-            </div>
+            </a>
           ) : (
             <div className="border-[1.5px] border-dashed border-input-border rounded-2xl p-4.5 text-center text-[13.5px] text-muted">
               {item.type === "periodiek"

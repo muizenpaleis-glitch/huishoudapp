@@ -17,6 +17,9 @@ export type ContractFormValues = {
   autoRenewal: boolean;
   status: ContractStatus;
   docNaam: string;
+  docUrl: string;
+  notitie: string;
+  beheerderId: string;
 };
 
 export async function saveContract(id: string | null, values: ContractFormValues) {
@@ -35,6 +38,9 @@ export async function saveContract(id: string | null, values: ContractFormValues
     autoRenewal: values.autoRenewal,
     status: values.status,
     docNaam: values.docNaam || null,
+    docUrl: values.docUrl || null,
+    notitie: values.notitie || null,
+    beheerderId: values.beheerderId || null,
   };
   let contractId = id;
   if (id) {

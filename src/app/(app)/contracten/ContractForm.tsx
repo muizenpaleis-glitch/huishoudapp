@@ -1,17 +1,21 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { BackButton, Pill, Toggle, PrimaryButton } from "@/components/ui";
+import { BackButton, Pill, Toggle, PrimaryButton, Avatar } from "@/components/ui";
 import { CONTRACT_CATEGORIEEN } from "@/lib/contracten";
 import { toDateInputValue, fmtKort } from "@/lib/format";
 import { saveContract, type ContractFormValues } from "./actions";
+import { FileUpload } from "@/components/FileUpload";
+import { QuickAddMember } from "@/components/QuickAddMember";
 import type { Contract, ContractStatus } from "@/generated/prisma/client";
+import type { Member } from "@/lib/members";
 
 const STATUSSEN: ContractStatus[] = ["Actief", "Opgezegd", "Verlopen"];
 
-export function ContractForm({ contract }: { contract?: Contract }) {
+export function ContractForm({ contract, members }: { contract?: Contract; members: Member[] }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [memberList, setMemberList] = useState(members);
 
   const [naam, setNaam] = useState(contract?.naam ?? "");
   const [leverancier, setLeverancier] = useState(contract?.leverancier ?? "");
@@ -24,6 +28,9 @@ export function ContractForm({ contract }: { contract?: Contract }) {
   const [autoRenewal, setAutoRenewal] = useState(contract?.autoRenewal ?? true);
   const [status, setStatus] = useState(contract?.status ?? "Actief");
   const [docNaam, setDocNaam] = useState(contract?.docNaam ?? "");
+  const [docUrl, setDocUrl] = useState(contract?.docUrl ?? "");
+  const [notitie, setNotitie] = useState(contract?.notitie ?? "");
+  const [beheerderId, setBeheerderId] = useState(contract?.beheerderId ?? "");
 
   const backHref = contract ? `/contracten/${contract.id}` : "/contracten";
 
@@ -45,7 +52,8 @@ export function ContractForm({ contract }: { contract?: Contract }) {
     setError(null);
     const values: ContractFormValues = {
       naam, leverancier, categorie, startdatum, einddatum,
-      opzegType, opzegMaanden, opzegDatum, autoRenewal, status, docNaam,
+      opzegType, opzegMaanden, opzegDatum, autoRenewal, status,
+      docNaam, docUrl, notitie, beheerderId,
     };
     startTransition(async () => {
       await saveContract(contract?.id ?? null, values);
@@ -163,25 +171,46 @@ export function ContractForm({ contract }: { contract?: Contract }) {
             </div>
           </Field>
 
-          <Field label="Document">
-            {docNaam ? (
-              <div className="flex items-center gap-2.5 bg-card border border-card-border rounded-2xl px-3.5 py-3">
-                <div className="flex-1 text-[13.5px] font-semibold truncate">{docNaam}</div>
-                <button type="button" onClick={() => setDocNaam("")} className="text-[12.5px] font-semibold text-danger">
-                  Verwijder
+          <Field label="Beheerder (optioneel)">
+            <div className="flex gap-1.5 flex-wrap items-center">
+              {memberList.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setBeheerderId(beheerderId === m.id ? "" : m.id)}
+                  className="flex items-center gap-1.5 pl-1.5 pr-3 py-1.5 rounded-full border"
+                  style={{
+                    background: beheerderId === m.id ? "var(--color-ink)" : "var(--color-card)",
+                    color: beheerderId === m.id ? "var(--color-accent-ink)" : "var(--color-ink-soft)",
+                    borderColor: beheerderId === m.id ? "var(--color-ink)" : "var(--color-input-border)",
+                  }}
+                >
+                  <Avatar naam={m.naam} kleur={m.kleur} size={22} />
+                  <span className="text-[13px] font-semibold">{m.naam}</span>
                 </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() =>
-                  setDocNaam((naam ? naam.toLowerCase().replace(/[^a-z0-9]+/g, "-") : "contract") + ".pdf")
-                }
-                className="border-[1.5px] border-dashed border-input-border rounded-2xl p-5 text-center text-[13.5px] text-muted"
-              >
-                + Upload PDF of foto van het contract
-              </button>
-            )}
+              ))}
+              <QuickAddMember
+                existingCount={memberList.length}
+                onCreated={(m) => {
+                  setMemberList((prev) => [...prev, m]);
+                  setBeheerderId(m.id);
+                }}
+              />
+            </div>
+          </Field>
+
+          <Field label="Document">
+            <FileUpload naam={docNaam} url={docUrl} onChange={(n, u) => { setDocNaam(n); setDocUrl(u); }} />
+          </Field>
+
+          <Field label="Notitie (optioneel)">
+            <textarea
+              value={notitie}
+              onChange={(e) => setNotitie(e.target.value)}
+              placeholder="Vrije aantekening bij dit contract…"
+              rows={3}
+              className="input resize-none"
+            />
           </Field>
 
           {error && <div className="text-[13px] text-danger font-semibold">{error}</div>}

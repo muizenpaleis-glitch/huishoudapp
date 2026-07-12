@@ -5,3 +5,5 @@ export function getMembers() {
 }
 
 export type Member = Awaited<ReturnType<typeof getMembers>>[number];
+
+export { LID_KLEUREN } from "@/lib/colors";

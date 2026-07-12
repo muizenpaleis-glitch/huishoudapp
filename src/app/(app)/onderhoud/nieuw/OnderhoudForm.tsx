@@ -3,21 +3,34 @@
 import { useState, useTransition } from "react";
 import { BackButton, Pill, PrimaryButton, Avatar } from "@/components/ui";
 import { ONDERHOUD_CATEGORIEEN, PRIORITEITEN } from "@/lib/onderhoud";
-import { createOnderhoudItem, type OnderhoudFormValues } from "../actions";
+import { createOnderhoudItem, updateOnderhoudItem, type OnderhoudFormValues } from "../actions";
+import { FileUpload } from "@/components/FileUpload";
+import { QuickAddMember } from "@/components/QuickAddMember";
 import type { Member } from "@/lib/members";
-import type { OnderhoudCategorie, OnderhoudPrioriteit, OnderhoudType } from "@/generated/prisma/client";
+import type { OnderhoudCategorie, OnderhoudItem, OnderhoudPrioriteit, OnderhoudType } from "@/generated/prisma/client";
 
-export function OnderhoudForm({ members }: { members: Member[] }) {
+function toDateInputValue(d: Date | null | undefined): string {
+  if (!d) return "";
+  return d.toISOString().slice(0, 10);
+}
+
+export function OnderhoudForm({ members, item }: { members: Member[]; item?: OnderhoudItem }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [type, setType] = useState<OnderhoudType>("taak");
-  const [naam, setNaam] = useState("");
-  const [categorie, setCategorie] = useState<OnderhoudCategorie>("Huis");
-  const [prio, setPrio] = useState<OnderhoudPrioriteit>("Gemiddeld");
-  const [intervalMaanden, setIntervalMaanden] = useState(12);
-  const [volgende, setVolgende] = useState("");
-  const [streefdatum, setStreefdatum] = useState("");
-  const [toegewezenId, setToegewezenId] = useState("");
+  const [memberList, setMemberList] = useState(members);
+  const [type] = useState<OnderhoudType>(item?.type ?? "taak");
+  const [naam, setNaam] = useState(item?.naam ?? "");
+  const [categorie, setCategorie] = useState<OnderhoudCategorie>(item?.categorie ?? "Huis");
+  const [prio, setPrio] = useState<OnderhoudPrioriteit>(item?.prio ?? "Gemiddeld");
+  const [intervalMaanden, setIntervalMaanden] = useState(item?.intervalMaanden ?? 12);
+  const [volgende, setVolgende] = useState(toDateInputValue(item?.volgende));
+  const [streefdatum, setStreefdatum] = useState(toDateInputValue(item?.streefdatum));
+  const [toegewezenId, setToegewezenId] = useState(item?.toegewezenId ?? "");
+  const [doc, setDoc] = useState(item?.doc ?? "");
+  const [docUrl, setDocUrl] = useState(item?.docUrl ?? "");
+  const [notitie, setNotitie] = useState(item?.notitie ?? "");
+
+  const backHref = item ? `/onderhoud/${item.id}` : "/onderhoud";
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,9 +41,14 @@ export function OnderhoudForm({ members }: { members: Member[] }) {
     setError(null);
     const values: OnderhoudFormValues = {
       type, naam, categorie, prio, intervalMaanden, volgende, streefdatum, toegewezenId,
+      doc, docUrl, notitie,
     };
     startTransition(async () => {
-      await createOnderhoudItem(values);
+      if (item) {
+        await updateOnderhoudItem(item.id, values);
+      } else {
+        await createOnderhoudItem(values);
+      }
     });
   }
 
@@ -38,28 +56,30 @@ export function OnderhoudForm({ members }: { members: Member[] }) {
     <div className="pt-16 md:pt-6 px-5 pb-8 overflow-y-auto">
       <form onSubmit={onSubmit} className="max-w-[640px] mx-auto flex flex-col gap-4.5">
         <div className="flex items-center gap-3">
-          <BackButton href="/onderhoud" />
-          <div className="text-[21px] font-bold tracking-tight">Nieuw item</div>
+          <BackButton href={backHref} />
+          <div className="text-[21px] font-bold tracking-tight">{item ? "Item bewerken" : "Nieuw item"}</div>
         </div>
 
-        <Field label="Type">
-          <div className="flex bg-track rounded-full p-[3px]">
-            {(["taak", "periodiek"] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setType(t)}
-                className="flex-1 text-center py-2 rounded-full text-[13px] font-semibold"
-                style={{
-                  background: type === t ? "var(--color-card)" : "transparent",
-                  color: type === t ? "var(--color-ink)" : "var(--color-muted)",
-                }}
-              >
-                {t === "taak" ? "Losse taak" : "Periodiek onderhoud"}
-              </button>
-            ))}
-          </div>
-        </Field>
+        {!item && (
+          <Field label="Type">
+            <div className="flex bg-track rounded-full p-[3px]">
+              {(["taak", "periodiek"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  disabled
+                  className="flex-1 text-center py-2 rounded-full text-[13px] font-semibold opacity-40"
+                  style={{
+                    background: type === t ? "var(--color-card)" : "transparent",
+                    color: type === t ? "var(--color-ink)" : "var(--color-muted)",
+                  }}
+                >
+                  {t === "taak" ? "Losse taak" : "Periodiek onderhoud"}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
 
         <Field label="Naam">
           <input
@@ -117,8 +137,8 @@ export function OnderhoudForm({ members }: { members: Member[] }) {
               />
             </Field>
             <Field label="Toegewezen aan (optioneel)">
-              <div className="flex gap-1.5 flex-wrap">
-                {members.map((m) => (
+              <div className="flex gap-1.5 flex-wrap items-center">
+                {memberList.map((m) => (
                   <button
                     key={m.id}
                     type="button"
@@ -134,15 +154,41 @@ export function OnderhoudForm({ members }: { members: Member[] }) {
                     <span className="text-[13px] font-semibold">{m.naam}</span>
                   </button>
                 ))}
+                <QuickAddMember
+                  existingCount={memberList.length}
+                  onCreated={(m) => {
+                    setMemberList((prev) => [...prev, m]);
+                    setToegewezenId(m.id);
+                  }}
+                />
               </div>
             </Field>
           </>
         )}
 
+        <Field label="Document (handleiding, garantiebewijs, bonnetje)">
+          <FileUpload
+            naam={doc}
+            url={docUrl}
+            onChange={(n, u) => { setDoc(n); setDocUrl(u); }}
+            cameraCapture
+          />
+        </Field>
+
+        <Field label="Notitie (optioneel)">
+          <textarea
+            value={notitie}
+            onChange={(e) => setNotitie(e.target.value)}
+            placeholder="Vrije aantekening bij dit item…"
+            rows={3}
+            className="input resize-none"
+          />
+        </Field>
+
         {error && <div className="text-[13px] text-danger font-semibold">{error}</div>}
 
         <PrimaryButton type="submit" className="mt-1 w-full" disabled={pending}>
-          Toevoegen
+          {item ? "Wijzigingen opslaan" : "Toevoegen"}
         </PrimaryButton>
       </form>
       <style jsx global>{`

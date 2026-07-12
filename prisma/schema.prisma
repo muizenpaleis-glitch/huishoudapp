@@ -82,6 +82,8 @@ model Contract {
   autoRenewal   Boolean           @default(true)
   status        ContractStatus    @default(Actief)
   docNaam       String?
+  docUrl        String?
+  notitie       String?
   beheerderId   String?
   beheerder     HouseholdMember?  @relation(fields: [beheerderId], references: [id], onDelete: SetNull)
   createdAt     DateTime          @default(now())
@@ -122,6 +124,7 @@ model OnderhoudItem {
   categorie        OnderhoudCategorie
   prio             OnderhoudPrioriteit
   doc              String?
+  docUrl           String?
   notitie          String?
   notitieKort      String?
 

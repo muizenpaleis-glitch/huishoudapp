@@ -569,11 +569,11 @@ function EnergyTile({ icon, waarde, label }: { icon: React.ReactNode; waarde: st
 
 function DagTotaalTile({ label, waarde }: { label: string; waarde: string }) {
   return (
-    <div className="px-3.5 py-3 rounded-2xl bg-[#F1F5EF] flex items-center justify-between" style={{ border: "1px solid #DCE8DE" }}>
-      <div className="text-[12px] font-semibold" style={{ color: "#4A6B4F" }}>
+    <div className="px-3 py-2.5 rounded-2xl bg-[#F1F5EF] flex flex-col gap-0.5 min-w-0" style={{ border: "1px solid #DCE8DE" }}>
+      <div className="text-[11px] font-semibold truncate" style={{ color: "#4A6B4F" }}>
         {label}
       </div>
-      <div className="text-[14px] font-bold tabular-nums" style={{ color: "#2F6E58" }}>
+      <div className="text-[14px] font-bold tabular-nums whitespace-nowrap" style={{ color: "#2F6E58" }}>
         {waarde}
       </div>
     </div>
