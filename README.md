@@ -82,6 +82,24 @@ The Huis dashboard (lights, energy, EV charger, cameras) currently runs on **dem
 
 When you're ready to connect it for real: give the Nabu Casa URL, an access token, and your entity IDs, and a later pass can wire `HuisLamp`/`HuisCamera`/`HuisLaadpaal`/`HuisAutomatisering` up to Home Assistant's WebSocket/REST API instead of Postgres-backed demo rows.
 
+## Agenda module (Google Agenda koppelen)
+
+The Agenda tab reads and writes a Google Calendar directly, via a **service account** (no per-user OAuth — a good fit for one shared household calendar). Until it's connected it shows a friendly "nog niet gekoppeld" state; set `CALENDAR_DEMO=1` to preview the UI with sample events.
+
+Data layer lives in `src/lib/google-calendar.ts` (auth + Calendar REST calls), the UI in `src/app/(app)/agenda/`.
+
+**One-time setup (needs a Google account):**
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com), create a project (any name).
+2. In **APIs & Services → Library**, search **Google Calendar API** and click **Enable**.
+3. In **APIs & Services → Credentials → Create credentials → Service account**, make one (any name, no roles needed). Open it → **Keys → Add key → Create new key → JSON**, and download the file.
+4. Open Google Calendar in a browser → the calendar you want to use (e.g. **Gezin**) → **Settings and sharing → Share with specific people → Add people**, paste the service account's email (ends in `…iam.gserviceaccount.com`), and give it **"Make changes to events"**. Copy the calendar's **Calendar ID** from the same settings page.
+5. In Vercel (**Settings → Environment Variables**), add three variables from the downloaded JSON + step 4:
+   - `GOOGLE_SERVICE_ACCOUNT_EMAIL` — the JSON's `client_email`
+   - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` — the JSON's `private_key` (paste it exactly, including the `-----BEGIN…` lines; the `\n`s are handled automatically)
+   - `GOOGLE_CALENDAR_ID` — the Calendar ID from step 4
+6. Redeploy. The Agenda tab now shows the real calendar and edits sync straight back to Google (and to everyone's phones).
+
 ## Known scope decisions
 
 - The original design's "Geavanceerd" debug menu had a "Reset all data" action; since this app now holds real persisted data (not prototype sample data), only **Reset triage** was carried over as a real, confirmed action. A full data wipe didn't make sense to ship as a normal feature.

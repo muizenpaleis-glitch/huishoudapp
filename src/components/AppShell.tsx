@@ -8,6 +8,7 @@ import { ActiveMemberProvider } from "@/components/ActiveMemberContext";
 import {
   ContractenIcon,
   OnderhoudIcon,
+  AgendaIcon,
   FinancienIcon,
   HuisIcon,
   SettingsIcon,
@@ -16,6 +17,7 @@ import {
 const TABS = [
   { key: "contracten", href: "/contracten", label: "Contracten", Icon: ContractenIcon },
   { key: "onderhoud", href: "/onderhoud", label: "Onderhoud", Icon: OnderhoudIcon },
+  { key: "agenda", href: "/agenda", label: "Agenda", Icon: AgendaIcon },
   { key: "financien", href: "/financien", label: "Financiën", Icon: FinancienIcon },
   { key: "huis", href: "/huis", label: "Huis", Icon: HuisIcon },
   { key: "instellingen", href: "/instellingen", label: "Instellingen", Icon: SettingsIcon },
@@ -80,21 +82,21 @@ export function AppShell({
           <div className="flex-1 min-h-0 pb-[110px] md:pb-6">{children}</div>
 
           {/* Bottom tab bar (mobile) */}
-          <div className="md:hidden fixed left-3.5 right-3.5 bottom-3.5 bg-card/92 backdrop-blur-md border border-avatar-border rounded-[26px] p-2 flex shadow-[0_6px_22px_rgba(94,72,50,0.12)] z-10">
+          <div className="md:hidden fixed left-2.5 right-2.5 bottom-3.5 bg-card/92 backdrop-blur-md border border-avatar-border rounded-[24px] p-1.5 flex shadow-[0_6px_22px_rgba(94,72,50,0.12)] z-10">
             {TABS.map((t) => {
               const active = isActive(pathname, t.href);
               return (
                 <Link
                   key={t.key}
                   href={t.href}
-                  className="flex-1 flex flex-col items-center gap-[3px] py-2 pb-1.5 rounded-2xl"
+                  className="flex-1 min-w-0 flex flex-col items-center gap-[3px] py-2 pb-1.5 rounded-2xl"
                   style={{
                     background: active ? "var(--color-accent-tint)" : "transparent",
                     color: active ? "var(--color-accent)" : "var(--color-muted)",
                   }}
                 >
-                  <t.Icon size={21} />
-                  <div className="text-[11px] font-semibold">{t.label}</div>
+                  <t.Icon size={20} />
+                  <div className="text-[9.5px] font-semibold truncate max-w-full">{t.label}</div>
                 </Link>
               );
             })}
