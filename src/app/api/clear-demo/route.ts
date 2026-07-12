@@ -29,20 +29,12 @@ export async function GET(req: Request) {
   }
 
   if (url.searchParams.get("financien") === "1") {
-    await prisma.financeTransactie.deleteMany();
-    await prisma.financeIncidenteelProject.deleteMany();
-    await prisma.financeJaarlijksItem.deleteMany();
-    await prisma.financeCategorieBudget.deleteMany();
-    await prisma.financeMjpResultaat.deleteMany();
-    await prisma.financeMaandFactor.updateMany({ data: { factor: 1 } });
-    await prisma.financeNetWorth.update({
-      where: { id: 1 },
-      data: {
-        buffer: 0, spaargeld: 0, beleggingen: 0, startVermogen: 0, kritiekeGrens: 0,
-        incomeMaand: 0, spendBudgetMaand: 0, spendActualMaand: 0,
-      },
-    });
-    cleared.push("financiën (projecten, jaarposten, categorieën, transacties, cijfers op 0)");
+    // Wipe the imported transactions + manual triage so the module starts
+    // empty; the default settings, projecten and jaarposten stay in place so
+    // the plan/budget framework keeps working until real CSV's are uploaded.
+    await prisma.financeOverride.deleteMany();
+    const r = await prisma.financeTx.deleteMany();
+    cleared.push(`financiën (${r.count} voorbeeld-transacties + triage gewist)`);
   }
 
   if (cleared.length === 0) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { seedDatabase, seedHuis } from "@/lib/seed-data";
+import { seedFinance } from "@/lib/finance/seed";
 
 // One-time setup: fills the database with starting data (household members,
 // example contracts, onderhoud items, finance figures, Huis demo data).
@@ -16,9 +17,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const [members, huisLampen] = await Promise.all([
+  const [members, huisLampen, financeSettings] = await Promise.all([
     prisma.householdMember.count(),
     prisma.huisLamp.count(),
+    prisma.financeSettings.count(),
   ]);
 
   if (members === 0) {
@@ -34,6 +36,17 @@ export async function GET(req: Request) {
     return NextResponse.json({
       ok: true,
       message: "Klaar! De Huis-module is gevuld met voorbeelddata. Je bestaande gegevens zijn niet aangeraakt.",
+    });
+  }
+
+  if (financeSettings === 0) {
+    // Finance module was rebuilt to the raw transaction model; backfill the
+    // default settings/projects/yearly + the May-2026 ASN sample so the
+    // figures match the reference dashboard, without touching other data.
+    await seedFinance(prisma);
+    return NextResponse.json({
+      ok: true,
+      message: "Klaar! De Financiën-module is gevuld met de voorbeeld-data. Je bestaande gegevens zijn niet aangeraakt.",
     });
   }
 

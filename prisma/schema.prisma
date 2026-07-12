@@ -184,91 +184,65 @@ model VrijeInhoudBlok {
 }
 
 // ───────────────────────── Financien ─────────────────────────
+// Raw model: the app stores raw bank transactions + manual overrides +
+// settings + editable projects/yearly items, and computes everything live
+// (classification → aggregation → buffer → MJP projection) with the ported
+// engine in src/lib/finance/. This mirrors the original finance_cockpit.html
+// exactly, so every displayed figure is derived (never baked in).
 
-enum TransactieKlasse {
-  recurring
-  yearly
-  incidental
-  exclude
+model FinanceSettings {
+  id                         Int      @id @default(1)
+  startNetWorth              Decimal  @db.Decimal(12, 2)
+  returnRate                 Decimal  @db.Decimal(6, 3)
+  horizon                    Int
+  savingsGrowth              Decimal  @db.Decimal(6, 3)
+  monthlyBudget              Decimal  @db.Decimal(12, 2)
+  monthlyIncome              Decimal  @db.Decimal(12, 2)
+  threshold                  Decimal  @db.Decimal(12, 2)
+  savingsAccounts            String[]
+  investmentAccounts         String[]
+  savingsIncidentalThreshold Decimal  @db.Decimal(12, 2)
+  categoryBudgets            Json // Record<bankCategory, monthlyBudget>
+  personalSavings            Decimal  @db.Decimal(12, 2)
+  investmentValue            Decimal  @db.Decimal(12, 2)
 }
 
-model FinanceNetWorth {
-  id             Int     @id @default(1)
-  buffer         Decimal @db.Decimal(12, 2)
-  spaargeld      Decimal @db.Decimal(12, 2)
-  beleggingen    Decimal @db.Decimal(12, 2)
-  startVermogen  Decimal @db.Decimal(12, 2)
-  kritiekeGrens  Decimal @db.Decimal(12, 2)
-  incomeMaand    Decimal @db.Decimal(12, 2)
-  spendBudgetMaand Decimal @db.Decimal(12, 2)
-  spendActualMaand Decimal @db.Decimal(12, 2)
+model FinanceTx {
+  id            String  @id // composite "dd-mm-yyyy|seq|amount" from the ASN export
+  date          String // YYYY-MM-DD (string slicing drives the engine)
+  iban          String
+  naam          String
+  balanceBefore Decimal @db.Decimal(12, 2)
+  amount        Decimal @db.Decimal(12, 2)
+  code          String
+  seq           String
+  descr         String
+  bankCat       String
 }
 
-model FinanceMjpResultaat {
-  jaar          Int     @id
-  opResultaat   Decimal @db.Decimal(12, 2)
+model FinanceOverride {
+  txId          String   @id
+  cls           String?
+  project       String?
+  bankCat       String?
+  notInvestment Boolean?
+  savingsInc    Boolean?
 }
 
-model FinanceMaandFactor {
-  maand   String  @id // 'YYYY-MM'
-  kort    String
-  lang    String
-  factor  Decimal @db.Decimal(4, 2)
-}
-
-model FinanceCategorieBudget {
-  id                String   @id @default(cuid())
-  label             String   @unique
-  budgetMaandelijks Decimal  @db.Decimal(12, 2)
-  actualMaandelijks Decimal  @db.Decimal(12, 2)
-  kleur             String?
-  vast              Boolean  @default(false)
-  volgorde          Int      @default(0)
-  inSpendOverzicht  Boolean  @default(false)
-  inBudgetOverzicht Boolean  @default(false)
-
-  transacties FinanceTransactie[]
-}
-
-model FinanceIncidenteelProject {
-  id       String   @id @default(cuid())
+model FinanceProject {
+  id       String  @id @default(cuid())
   naam     String
-  budget   Decimal  @db.Decimal(12, 2)
+  budget   Decimal @db.Decimal(12, 2)
   jaar     Int
-  done     Boolean  @default(false)
-  besteed  Decimal  @db.Decimal(12, 2) @default(0)
-
-  transacties FinanceTransactie[]
+  done     Boolean @default(false)
+  volgorde Int     @default(0)
 }
 
-model FinanceJaarlijksItem {
-  id                String   @id @default(cuid())
-  naam              String
-  budgetJaarlijks   Decimal  @db.Decimal(12, 2)
-  besteed2026       Decimal  @db.Decimal(12, 2) @default(0)
-
-  transacties FinanceTransactie[]
-}
-
-model FinanceTransactie {
-  id             String            @id @default(cuid())
-  datum          DateTime
-  naam           String
-  omschrijving   String
-  bankCategorie  String
-  bedrag         Decimal           @db.Decimal(12, 2)
-  klasse         TransactieKlasse
-
-  categorieBudgetId String?
-  categorieBudget   FinanceCategorieBudget? @relation(fields: [categorieBudgetId], references: [id], onDelete: SetNull)
-
-  projectId      String?
-  project        FinanceIncidenteelProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-
-  jaarlijksItemId String?
-  jaarlijksItem   FinanceJaarlijksItem? @relation(fields: [jaarlijksItemId], references: [id], onDelete: SetNull)
-
-  createdAt      DateTime          @default(now())
+model FinanceYearly {
+  id       String  @id @default(cuid())
+  naam     String
+  budget   Decimal @db.Decimal(12, 2)
+  volgorde Int     @default(0)
 }
 
 // ───────────────────────── Huis (Home Assistant) ─────────────────────────
