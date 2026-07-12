@@ -7,6 +7,7 @@ import { DocIcon, WarningIcon, CategorieIcons } from "@/components/icons";
 import { CATEGORIE_TINT, urgentie, urgentieKleur, deadline } from "@/lib/contracten";
 import { fmtKort, dagenTussen } from "@/lib/format";
 import { updateStatus } from "../actions";
+import { fileViewUrl } from "@/lib/files";
 import type { ContractCategorie, ContractStatus } from "@/generated/prisma/client";
 
 export default async function ContractDetailPage({
@@ -118,7 +119,7 @@ export default async function ContractDetailPage({
           <div className="text-[13px] font-bold tracking-wider uppercase text-label">Document</div>
           {contract.docNaam ? (
             <a
-              href={contract.docUrl || undefined}
+              href={contract.docUrl ? fileViewUrl(contract.docUrl) : undefined}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-3"

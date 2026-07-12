@@ -8,6 +8,7 @@ import { DocIcon, WarningIcon, CameraIcon, OnderhoudCategorieIcons } from "@/com
 import { CATEGORIE_TINT, urgentie, urgentieKleur, itemDatum } from "@/lib/onderhoud";
 import { fmtKort, dagenTussen } from "@/lib/format";
 import { logUitvoering, wijzigTaakStatus } from "../actions";
+import { fileViewUrl } from "@/lib/files";
 import { SubtaskList } from "./SubtaskList";
 import { AssignPills } from "./AssignPills";
 import type { OnderhoudCategorie, TaakStatus } from "@/generated/prisma/client";
@@ -210,7 +211,7 @@ export default async function OnderhoudDetailPage({
           <div className="text-[13px] font-bold tracking-wider uppercase text-label">Document</div>
           {item.doc ? (
             <a
-              href={item.docUrl || undefined}
+              href={item.docUrl ? fileViewUrl(item.docUrl) : undefined}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-3"

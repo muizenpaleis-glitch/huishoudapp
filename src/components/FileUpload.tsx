@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import { DocIcon, CameraIcon, TrashIcon } from "@/components/icons";
+import { fileViewUrl } from "@/lib/files";
 
 // Camera photos (esp. HEIC/JPEG from phones) can be 8-12MB, which feels like
 // a hang on mobile networks. Downscale + re-encode as JPEG before upload.
@@ -56,7 +57,7 @@ export function FileUpload({
     try {
       const file = await compressImage(rawFile);
       const blob = await upload(file.name, file, {
-        access: "public",
+        access: "private",
         handleUploadUrl: "/api/upload",
         multipart: true,
         onUploadProgress: ({ percentage }) => setProgress(percentage),
@@ -87,7 +88,7 @@ export function FileUpload({
           <DocIcon size={17} className="text-accent" />
         </div>
         <a
-          href={url || undefined}
+          href={url ? fileViewUrl(url) : undefined}
           target="_blank"
           rel="noopener noreferrer"
           className="flex-1 min-w-0 text-[13.5px] font-semibold truncate"
