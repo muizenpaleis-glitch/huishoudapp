@@ -146,6 +146,12 @@ export async function updateOnderhoudItem(id: string, values: OnderhoudFormValue
   redirect(`/onderhoud/${id}`);
 }
 
+export async function deleteOnderhoudItem(id: string) {
+  await prisma.onderhoudItem.delete({ where: { id } });
+  refresh();
+  redirect("/onderhoud");
+}
+
 export async function updateOnderhoudNotificaties(values: {
   onderhoudDrempel: number;
   contractPush: boolean;

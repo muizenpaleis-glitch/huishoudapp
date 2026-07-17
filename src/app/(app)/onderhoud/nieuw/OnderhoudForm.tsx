@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { BackButton, Pill, PrimaryButton, Avatar } from "@/components/ui";
 import { ONDERHOUD_CATEGORIEEN, PRIORITEITEN } from "@/lib/onderhoud";
-import { createOnderhoudItem, updateOnderhoudItem, type OnderhoudFormValues } from "../actions";
+import { createOnderhoudItem, updateOnderhoudItem, deleteOnderhoudItem, type OnderhoudFormValues } from "../actions";
 import { FileUpload } from "@/components/FileUpload";
 import { QuickAddMember } from "@/components/QuickAddMember";
 import type { Member } from "@/lib/members";
@@ -18,7 +18,7 @@ export function OnderhoudForm({ members, item }: { members: Member[]; item?: Ond
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [memberList, setMemberList] = useState(members);
-  const [type] = useState<OnderhoudType>(item?.type ?? "taak");
+  const [type, setType] = useState<OnderhoudType>(item?.type ?? "taak");
   const [naam, setNaam] = useState(item?.naam ?? "");
   const [categorie, setCategorie] = useState<OnderhoudCategorie>(item?.categorie ?? "Huis");
   const [prio, setPrio] = useState<OnderhoudPrioriteit>(item?.prio ?? "Gemiddeld");
@@ -52,6 +52,14 @@ export function OnderhoudForm({ members, item }: { members: Member[]; item?: Ond
     });
   }
 
+  function onDelete() {
+    if (!item) return;
+    if (!confirm(`Weet je zeker dat je "${item.naam}" wilt verwijderen?`)) return;
+    startTransition(async () => {
+      await deleteOnderhoudItem(item.id);
+    });
+  }
+
   return (
     <div className="pt-16 md:pt-6 px-5 pb-8 overflow-y-auto">
       <form onSubmit={onSubmit} className="max-w-[640px] mx-auto flex flex-col gap-4.5">
@@ -67,8 +75,8 @@ export function OnderhoudForm({ members, item }: { members: Member[]; item?: Ond
                 <button
                   key={t}
                   type="button"
-                  disabled
-                  className="flex-1 text-center py-2 rounded-full text-[13px] font-semibold opacity-40"
+                  onClick={() => setType(t)}
+                  className="flex-1 text-center py-2 rounded-full text-[13px] font-semibold"
                   style={{
                     background: type === t ? "var(--color-card)" : "transparent",
                     color: type === t ? "var(--color-ink)" : "var(--color-muted)",
@@ -190,6 +198,17 @@ export function OnderhoudForm({ members, item }: { members: Member[]; item?: Ond
         <PrimaryButton type="submit" className="mt-1 w-full" disabled={pending}>
           {item ? "Wijzigingen opslaan" : "Toevoegen"}
         </PrimaryButton>
+
+        {item && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={pending}
+            className="text-center text-[13.5px] font-semibold text-danger py-2"
+          >
+            Item verwijderen
+          </button>
+        )}
       </form>
       <style jsx global>{`
         .input {
