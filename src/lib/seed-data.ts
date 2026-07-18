@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@/generated/prisma/client";
-import { seedFinance } from "@/lib/finance/seed";
+import { seedFinance, seedFinanceStructure } from "@/lib/finance/seed";
 
 export async function seedDatabase(prisma: PrismaClient) {
   await seedHuis(prisma);
@@ -153,6 +153,37 @@ export async function seedDatabase(prisma: PrismaClient) {
   });
 
   // Huis is seeded independently — see seedHuis() below.
+}
+
+// Seeds a blank-slate instance for demoing the app to people outside the
+// household: Huis keeps its existing simulated data (already synthetic), the
+// Financiën budget structure stays as the app's reference model but with
+// zero transactions/IBANs, and Contracten + Onderhoud start completely empty
+// so visitors add their own. No real household data (names, providers,
+// account numbers, spending history) is included.
+export async function seedDemo(prisma: PrismaClient) {
+  await seedHuis(prisma);
+  await seedFinanceStructure(prisma);
+
+  await prisma.subtaak.deleteMany();
+  await prisma.vrijeInhoudBlok.deleteMany();
+  await prisma.onderhoudLog.deleteMany();
+  await prisma.onderhoudItem.deleteMany();
+  await prisma.contract.deleteMany();
+  await prisma.pushSubscription.deleteMany();
+  await prisma.householdMember.deleteMany();
+  await prisma.appSettings.deleteMany();
+
+  await prisma.householdMember.createMany({
+    data: [
+      { naam: "Sam", kleur: "#C4633B" },
+      { naam: "Robin", kleur: "#5C7F55" },
+    ],
+  });
+
+  await prisma.appSettings.create({
+    data: { id: 1, contractDrempel: 60, contractMail: true, contractPush: false, onderhoudDrempel: 14 },
+  });
 }
 
 // Demo data for the Huis module — no live Home Assistant connection yet.

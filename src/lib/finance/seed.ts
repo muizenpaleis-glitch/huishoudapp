@@ -3,11 +3,12 @@ import { DEFAULT_SETTINGS, DEFAULT_PROJECTS, DEFAULT_YEARLY } from "./engine";
 import { parseAsnCsv } from "./asn";
 import { SAMPLE_CSV } from "./sample-csv";
 
-// Seeds the finance module to the original dashboard's starting point:
-// default settings/projects/yearly items + the embedded May-2026 ASN sample,
-// so every computed figure matches finance_cockpit.html out of the box.
-// Reused by the seed script, the "reset all data" action, and clear-demo.
-export async function seedFinance(prisma: PrismaClient) {
+// Seeds just the budget structure (settings + default projects/yearly items),
+// with zero transactions and no bank IBANs. Used for the friends-facing demo
+// deployment, where no real spending history, net-worth position, or account
+// number should be visible — only the reference budget model that ships with
+// the app's code either way.
+export async function seedFinanceStructure(prisma: PrismaClient) {
   await prisma.financeOverride.deleteMany();
   await prisma.financeTx.deleteMany();
   await prisma.financeProject.deleteMany();
@@ -24,8 +25,8 @@ export async function seedFinance(prisma: PrismaClient) {
       monthlyBudget: DEFAULT_SETTINGS.monthlyBudget,
       monthlyIncome: DEFAULT_SETTINGS.monthlyIncome,
       threshold: DEFAULT_SETTINGS.threshold,
-      savingsAccounts: DEFAULT_SETTINGS.savingsAccounts,
-      investmentAccounts: DEFAULT_SETTINGS.investmentAccounts,
+      savingsAccounts: [], // no real IBANs in the demo
+      investmentAccounts: [],
       savingsIncidentalThreshold: DEFAULT_SETTINGS.savingsIncidentalThreshold,
       categoryBudgets: DEFAULT_SETTINGS.categoryBudgets,
       personalSavings: DEFAULT_SETTINGS.personalSavings,
@@ -45,6 +46,19 @@ export async function seedFinance(prisma: PrismaClient) {
 
   await prisma.financeYearly.createMany({
     data: DEFAULT_YEARLY.map((y, i) => ({ naam: y.name, budget: y.budget, volgorde: i })),
+  });
+}
+
+// Seeds the finance module to the original dashboard's starting point:
+// the structure above, plus the embedded May-2026 ASN sample transactions
+// (which carry the real household's savings IBAN), so every computed figure
+// matches finance_cockpit.html out of the box. Reused by the seed script and
+// the "reset all data" action — NOT used for the demo deployment.
+export async function seedFinance(prisma: PrismaClient) {
+  await seedFinanceStructure(prisma);
+  await prisma.financeSettings.update({
+    where: { id: 1 },
+    data: { savingsAccounts: DEFAULT_SETTINGS.savingsAccounts },
   });
 
   const txs = parseAsnCsv(SAMPLE_CSV);

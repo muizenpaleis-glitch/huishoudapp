@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { seedDatabase, seedHuis } from "@/lib/seed-data";
+import { seedDatabase, seedDemo, seedHuis } from "@/lib/seed-data";
 import { seedFinance } from "@/lib/finance/seed";
 
-// One-time setup: fills the database with starting data (household members,
-// example contracts, onderhoud items, finance figures, Huis demo data).
-// Safe to visit more than once:
-// - on a brand new database, it seeds everything
+// One-time setup: fills the database with starting data. Safe to visit more
+// than once:
+// - on a brand new database, it seeds everything (real household data, or a
+//   blank-slate demo dataset if &demo=1 — see seedDemo() for what that means)
 // - on a database that already has real household data but is missing the
 //   newer Huis tables (e.g. right after this module was added), it backfills
 //   just those, leaving your real data untouched
-// - once both are present, it refuses to run again
+// - once everything is present, it refuses to run again
 export async function GET(req: Request) {
-  const secret = new URL(req.url).searchParams.get("secret");
+  const url = new URL(req.url);
+  const secret = url.searchParams.get("secret");
   if (!process.env.SETUP_SECRET || secret !== process.env.SETUP_SECRET) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+  const demo = url.searchParams.get("demo") === "1";
 
   const [members, huisLampen, financeSettings] = await Promise.all([
     prisma.householdMember.count(),
@@ -24,6 +26,13 @@ export async function GET(req: Request) {
   ]);
 
   if (members === 0) {
+    if (demo) {
+      await seedDemo(prisma);
+      return NextResponse.json({
+        ok: true,
+        message: "Klaar! Dit is een lege demo-omgeving — geen echte gegevens. Je kunt deze pagina nu sluiten.",
+      });
+    }
     await seedDatabase(prisma);
     return NextResponse.json({
       ok: true,
