@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { turnLight, setLightBrightness, setLightColorTempKelvin, kleurTempToKelvin } from "@/lib/home-assistant";
+import {
+  turnLight,
+  setLightBrightness,
+  setLightColorTempKelvin,
+  kleurTempToKelvin,
+  getLiveLightState,
+} from "@/lib/home-assistant";
 import type { KleurTemp, LaadpaalStatus } from "@/generated/prisma/client";
 
 function refresh() {
@@ -12,7 +18,13 @@ function refresh() {
 export async function toggleLamp(id: string) {
   const lamp = await prisma.huisLamp.findUniqueOrThrow({ where: { id } });
   if (lamp.entityId) {
-    await turnLight(lamp.entityId, !lamp.aan);
+    // Flip based on Home Assistant's real current state, not the stored
+    // `aan` column — that column is never kept in sync for linked lamps
+    // (state always lives in HA), so it can't be trusted to know which
+    // direction to toggle.
+    const live = await getLiveLightState(lamp.entityId);
+    const isOn = live?.aan ?? lamp.aan;
+    await turnLight(lamp.entityId, !isOn);
   } else {
     await prisma.huisLamp.update({ where: { id }, data: { aan: !lamp.aan } });
   }
