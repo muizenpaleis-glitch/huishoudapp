@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { turnLight, setLightBrightness, setLightColorTempKelvin, kleurTempToKelvin } from "@/lib/home-assistant";
 import type { KleurTemp, LaadpaalStatus } from "@/generated/prisma/client";
 
 function refresh() {
@@ -10,21 +11,32 @@ function refresh() {
 
 export async function toggleLamp(id: string) {
   const lamp = await prisma.huisLamp.findUniqueOrThrow({ where: { id } });
-  await prisma.huisLamp.update({ where: { id }, data: { aan: !lamp.aan } });
+  if (lamp.entityId) {
+    await turnLight(lamp.entityId, !lamp.aan);
+  } else {
+    await prisma.huisLamp.update({ where: { id }, data: { aan: !lamp.aan } });
+  }
   refresh();
 }
 
 export async function setLampHelderheid(id: string, helderheid: number) {
   const clamped = Math.max(1, Math.min(100, Math.round(helderheid)));
-  await prisma.huisLamp.update({
-    where: { id },
-    data: { helderheid: clamped, aan: clamped > 0 },
-  });
+  const lamp = await prisma.huisLamp.findUniqueOrThrow({ where: { id } });
+  if (lamp.entityId) {
+    await setLightBrightness(lamp.entityId, clamped);
+  } else {
+    await prisma.huisLamp.update({ where: { id }, data: { helderheid: clamped, aan: clamped > 0 } });
+  }
   refresh();
 }
 
 export async function setLampKleurTemp(id: string, kleurTemp: KleurTemp) {
-  await prisma.huisLamp.update({ where: { id }, data: { kleurTemp } });
+  const lamp = await prisma.huisLamp.findUniqueOrThrow({ where: { id } });
+  if (lamp.entityId) {
+    await setLightColorTempKelvin(lamp.entityId, kleurTempToKelvin(kleurTemp));
+  } else {
+    await prisma.huisLamp.update({ where: { id }, data: { kleurTemp } });
+  }
   refresh();
 }
 

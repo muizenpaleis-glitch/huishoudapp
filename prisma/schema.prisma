@@ -264,6 +264,12 @@ model HuisLamp {
   helderheid Int       @default(50)
   kleurTemp  KleurTemp @default(neutraal)
   volgorde   Int       @default(0)
+  // Set when this lamp is a real Home Assistant light (e.g. "light.woonkamer")
+  // instead of simulated demo data. When set, aan/helderheid/kleurTemp above
+  // are ignored — the app reads live state from Home Assistant on every page
+  // load and calls its services to control the lamp, instead of using these
+  // stored columns as the source of truth.
+  entityId   String?   @unique
 }
 
 model HuisCamera {

@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
+import { haConfigured, getLiveLightStates } from "@/lib/home-assistant";
 import { HuisClient } from "./HuisClient";
 
 export default async function HuisPage() {
-  const [lampen, cameras, energieStatus, metingen, laadpaal, automatisering, favorieten] = await Promise.all([
+  const [lampenRows, cameras, energieStatus, metingen, laadpaal, automatisering, favorieten] = await Promise.all([
     prisma.huisLamp.findMany({ orderBy: { volgorde: "asc" } }),
     prisma.huisCamera.findMany({ orderBy: { volgorde: "asc" } }),
     prisma.huisEnergieStatus.findUniqueOrThrow({ where: { id: 1 } }),
@@ -14,6 +15,19 @@ export default async function HuisPage() {
     prisma.huisAutomatisering.findUniqueOrThrow({ where: { id: 1 } }),
     prisma.huisFavoriet.findMany({ orderBy: { volgorde: "asc" } }),
   ]);
+
+  // Lamps linked to a real Home Assistant entity get their on/off, brightness
+  // and color temp from Home Assistant live, instead of the stored columns.
+  const linkedIds = lampenRows.filter((l) => l.entityId).map((l) => l.entityId!);
+  const liveStates =
+    haConfigured() && linkedIds.length > 0
+      ? await getLiveLightStates(linkedIds).catch(() => new Map())
+      : new Map();
+
+  const lampen = lampenRows.map((l) => {
+    const live = l.entityId ? liveStates.get(l.entityId) : undefined;
+    return live ? { ...l, aan: live.aan, helderheid: live.helderheid, kleurTemp: live.kleurTemp } : l;
+  });
 
   return (
     <HuisClient

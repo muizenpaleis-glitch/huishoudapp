@@ -101,3 +101,45 @@ export async function setLightBrightness(entityId: string, pct: number): Promise
 export async function setLightColorTempKelvin(entityId: string, kelvin: number): Promise<void> {
   await callService("light", "turn_on", { entity_id: entityId, color_temp_kelvin: kelvin });
 }
+
+export type LiveLightState = { aan: boolean; helderheid: number; kleurTemp: "warm" | "neutraal" | "koel" };
+
+const KELVIN_BY_KLEURTEMP = { warm: 2700, neutraal: 4000, koel: 6000 } as const;
+
+function kelvinToKleurTemp(kelvin: number): LiveLightState["kleurTemp"] {
+  if (kelvin <= 3200) return "warm";
+  if (kelvin <= 5000) return "neutraal";
+  return "koel";
+}
+
+// Fetches live on/off + brightness + color temp for a set of real light
+// entities in one batch (a single /states call), falling back to sane
+// defaults for entities that don't support brightness/color temp (e.g. a
+// simple on/off relay). Returns a map keyed by entity_id; entities that
+// couldn't be found are omitted so the caller can fall back to stored values.
+export async function getLiveLightStates(entityIds: string[]): Promise<Map<string, LiveLightState>> {
+  const map = new Map<string, LiveLightState>();
+  if (entityIds.length === 0) return map;
+  const wanted = new Set(entityIds);
+  const all = await listStates("light");
+  for (const s of all) {
+    if (!wanted.has(s.entity_id)) continue;
+    const brightness255 = typeof s.attributes.brightness === "number" ? s.attributes.brightness : null;
+    const kelvin =
+      typeof s.attributes.color_temp_kelvin === "number"
+        ? s.attributes.color_temp_kelvin
+        : typeof s.attributes.color_temp === "number"
+          ? Math.round(1_000_000 / (s.attributes.color_temp as number))
+          : null;
+    map.set(s.entity_id, {
+      aan: s.state === "on",
+      helderheid: brightness255 != null ? Math.max(1, Math.round(brightness255 / 2.55)) : 100,
+      kleurTemp: kelvin != null ? kelvinToKleurTemp(kelvin) : "neutraal",
+    });
+  }
+  return map;
+}
+
+export function kleurTempToKelvin(kleurTemp: "warm" | "neutraal" | "koel"): number {
+  return KELVIN_BY_KLEURTEMP[kleurTemp];
+}
