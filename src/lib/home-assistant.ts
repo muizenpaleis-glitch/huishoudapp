@@ -93,6 +93,13 @@ export async function turnLight(entityId: string, on: boolean): Promise<void> {
   await callService("light", on ? "turn_on" : "turn_off", { entity_id: entityId });
 }
 
+// Flips current state regardless of what we think it is — used for the
+// lamp-mapping tool so clicking "Test" always produces a visible change,
+// even if our stored/assumed state is stale or wrong.
+export async function toggleLightRaw(entityId: string): Promise<void> {
+  await callService("light", "toggle", { entity_id: entityId });
+}
+
 export async function setLightBrightness(entityId: string, pct: number): Promise<void> {
   const clamped = Math.max(1, Math.min(100, Math.round(pct)));
   await callService("light", "turn_on", { entity_id: entityId, brightness_pct: clamped });

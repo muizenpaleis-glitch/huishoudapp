@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -229,7 +230,12 @@ export function HuisClient({
 
         {/* Verlichting */}
         <div className="flex flex-col gap-3.5">
-          <div className="text-[13px] font-bold tracking-wider uppercase text-label">Verlichting</div>
+          <div className="flex items-center justify-between">
+            <div className="text-[13px] font-bold tracking-wider uppercase text-label">Verlichting</div>
+            <Link href="/huis/koppelen" className="text-[12px] font-semibold text-accent">
+              Koppelen beheren
+            </Link>
+          </div>
           {lichtGroepen.map((g) => (
             <div key={g.kamer} className="flex flex-col gap-2.5">
               <div className="text-[14px] font-bold text-ink-soft">{g.kamer}</div>
