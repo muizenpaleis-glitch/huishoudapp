@@ -37,6 +37,8 @@ export default async function OnderhoudPage({
     if (type === "Periodiek" && it.type !== "periodiek") return false;
     if (type === "Taken" && it.type !== "taak") return false;
     if (categorie !== "Alle" && it.categorie !== categorie) return false;
+    // Afgeronde taken verdwijnen uit de lijst — dat is wat "Klaar" markeren betekent.
+    if (it.type === "taak" && it.status === "Klaar") return false;
     return true;
   });
 
@@ -51,9 +53,14 @@ export default async function OnderhoudPage({
     return da.getTime() - db.getTime();
   });
 
+  // Taken waar je "mee bezig" bent krijgen een eigen sectie bovenaan, los van
+  // hun prioriteit — je bent er al mee bezig, dus die wil je meteen zien.
+  const meeBezig = gesorteerd.filter((it) => it.type === "taak" && it.status === "Mee_bezig");
+  const overig = gesorteerd.filter((it) => !(it.type === "taak" && it.status === "Mee_bezig"));
+
   type Groep = { label: string; items: typeof gesorteerd };
   const groepen: Groep[] = [];
-  for (const it of gesorteerd) {
+  for (const it of overig) {
     const heeftDatum = !!itemDatum(it);
     const label = heeftDatum ? `Prioriteit ${it.prio.toLowerCase()}` : "Ooit een keer";
     let g = groepen.find((x) => x.label === label);
@@ -64,6 +71,9 @@ export default async function OnderhoudPage({
     g.items.push(it);
   }
   groepen.sort((a, b) => (a.label === "Ooit een keer" ? 1 : 0) - (b.label === "Ooit een keer" ? 1 : 0));
+  if (meeBezig.length > 0) {
+    groepen.unshift({ label: "Mee bezig", items: meeBezig });
+  }
 
   const aantalUrgent = items.filter((it) => {
     const u = urgentie(it, settings.onderhoudDrempel);
