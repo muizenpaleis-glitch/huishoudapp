@@ -6,6 +6,7 @@ import {
   effective,
   guessProject,
   guessYearly,
+  DEFAULT_CATEGORY_BUDGETS,
   type Tx,
   type Overrides,
   type Override,
@@ -55,6 +56,15 @@ export function TriageTable({
     if (sortAmount) list = [...list].sort((a, b) => a.t.amount - b.t.amount);
     return list;
   }, [transactions, overrides, settings, investIbans, filter, search, sortAmount]);
+
+  // Alle categorieën voor de dropdown: de vaste Jaarbegroting-lijst plus
+  // elke categorie die al ergens in de data voorkomt (bijv. via een eerdere
+  // handmatige aanpassing), zodat niets ontbreekt.
+  const alleCategorieen = useMemo(() => {
+    const set = new Set<string>(Object.keys(DEFAULT_CATEGORY_BUDGETS));
+    for (const t of transactions) set.add(effective(t, overrides, settings, investIbans).bankCat);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [transactions, overrides, settings, investIbans]);
 
   function save(txId: string, next: Override) {
     const cleaned: Override = {};
@@ -154,11 +164,18 @@ export function TriageTable({
                     <div className="text-[11px] text-muted truncate">{t.desc.slice(0, 60)}</div>
                   </td>
                   <td className="py-2 pr-3">
-                    <input
-                      defaultValue={e.bankCat}
-                      onBlur={(ev) => ev.target.value !== e.bankCat && onBankCat(t, ev.target.value)}
-                      className="w-32 px-1.5 py-1 rounded-md border border-input-border bg-card text-[11.5px]"
-                    />
+                    <select
+                      value={e.bankCat}
+                      onChange={(ev) => onBankCat(t, ev.target.value)}
+                      className="w-36 px-1.5 py-1 rounded-md border border-input-border bg-card text-[11.5px]"
+                    >
+                      {!alleCategorieen.includes(e.bankCat) && <option value={e.bankCat}>{e.bankCat}</option>}
+                      {alleCategorieen.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td
                     className="py-2 pr-3 text-right font-semibold whitespace-nowrap font-mono"
