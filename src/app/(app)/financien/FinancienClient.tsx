@@ -26,7 +26,7 @@ import {
 import type { FinanceState } from "@/lib/finance/load";
 import { ProjectionChart, CategoryDonut, CashflowBars } from "./charts";
 import { TriageTable } from "./TriageTable";
-import { SettingsPanel, ProjectEditor, YearlyEditor } from "./Editors";
+import { ProjectEditor, YearlyEditor } from "./Editors";
 import { ChatWidget } from "./ChatWidget";
 import {
   uploadCsv,
@@ -38,7 +38,7 @@ import {
 } from "./actions";
 
 export function FinancienClient({ state }: { state: FinanceState }) {
-  const { transactions, overrides, settings, projects, yearly } = state;
+  const { transactions, overrides, settings, projects, yearly, budgetJaar, mjpJaar } = state;
 
   // UI-only (per-device) state
   const [gran, setGran] = useState<TimeGran>("all");
@@ -67,8 +67,8 @@ export function FinancienClient({ state }: { state: FinanceState }) {
     [filteredTx, overrides, settings, investIbans],
   );
   const { plan, actual, total } = useMemo(
-    () => projectSeries(aggFull, settings, projects, yearly),
-    [aggFull, settings, projects, yearly],
+    () => projectSeries(aggFull, settings, projects, yearly, budgetJaar, mjpJaar),
+    [aggFull, settings, projects, yearly, budgetJaar, mjpJaar],
   );
 
   const buffer = computeBufferActual(aggFull, settings);
@@ -172,12 +172,20 @@ export function FinancienClient({ state }: { state: FinanceState }) {
             {transactions.length} transacties · {aggFull.monthCount} maand(en) · gedeeld huishouden
           </div>
         </div>
-        <Link
-          href="/financien/budget"
-          className="ml-auto shrink-0 px-3.5 py-2 rounded-full border border-input-border text-[12.5px] font-semibold text-ink-soft"
-        >
-          Budgetteren
-        </Link>
+        <div className="ml-auto shrink-0 flex gap-2">
+          <Link
+            href="/financien/budget"
+            className="px-3.5 py-2 rounded-full border border-input-border text-[12.5px] font-semibold text-ink-soft"
+          >
+            Budgetteren
+          </Link>
+          <Link
+            href="/financien/mjp"
+            className="px-3.5 py-2 rounded-full border border-input-border text-[12.5px] font-semibold text-ink-soft"
+          >
+            Meerjarenplan
+          </Link>
+        </div>
       </div>
 
       <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-[1080px] w-full mx-auto">
@@ -406,9 +414,22 @@ export function FinancienClient({ state }: { state: FinanceState }) {
             <YearlyEditor yearly={yearly} />
           </Collapsible>
 
-          <Collapsible title="Instellingen (projectie, rekeningen &amp; drempels)" defaultOpen={false}>
-            <SettingsPanel settings={settings} />
-          </Collapsible>
+          {/* Instellingen wonen nu bij het Meerjarenplan — horizon, rendement en
+              startpositie horen daar thuis en stonden hier los van hun effect. */}
+          <Card className="p-4.5 flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="text-[13px] font-bold tracking-wider uppercase text-label">Instellingen</div>
+              <div className="text-[12.5px] text-muted mt-0.5">
+                Projectie, rekeningen &amp; drempels staan bij het Meerjarenplan.
+              </div>
+            </div>
+            <Link
+              href="/financien/mjp"
+              className="px-3.5 py-2 rounded-full border border-input-border text-[12.5px] font-semibold text-ink-soft"
+            >
+              Naar Meerjarenplan
+            </Link>
+          </Card>
 
           <CsvUpload />
 
@@ -424,6 +445,8 @@ export function FinancienClient({ state }: { state: FinanceState }) {
         investIbans={investIbans}
         projects={projects}
         yearly={yearly}
+        budgetJaar={budgetJaar}
+        mjpJaar={mjpJaar}
         investDetected={investDetected}
       />
     </div>

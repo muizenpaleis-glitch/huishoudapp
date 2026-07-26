@@ -478,9 +478,9 @@ export function computeBufferActual(agg: Agg, settings: Settings): number {
 function grown(value: number, year: number, settings: Settings): number {
   return value * Math.pow(1 + settings.savingsGrowth / 100, year - 2031);
 }
-function opResultForYear(year: number, settings: Settings): number {
-  return OP_RESULT[year] !== undefined ? OP_RESULT[year] : grown(OP_RESULT[2031], year, settings);
-}
+// OP_RESULT is no longer extrapolated: the plan now derives the operational
+// result from the household's own budget lines (opResultaatVoorJaar). The
+// table survives purely as the `sheet` comparison figure for 2026–2031.
 function investmentForYear(year: number, settings: Settings): number {
   return INVESTMENTS[year] !== undefined ? INVESTMENTS[year] : grown(INVESTMENTS[2031], year, settings);
 }
@@ -490,7 +490,22 @@ export function plannedIncidentalForYear(year: number, settings: Settings, proje
   return total;
 }
 
-export function projectSeries(agg: Agg, settings: Settings, projects: Project[], yearly: Yearly[]) {
+/** Planned transfer into the investment pot for a year. A per-year override
+ *  wins; otherwise the original MJP table, extrapolated past 2031. */
+export function investeringVoorJaar(jaar: number, settings: Settings, mjpRows: MjpJaarRow[]): number {
+  const row = mjpRows.find((r) => r.jaar === jaar);
+  if (row && row.investeringen != null) return row.investeringen;
+  return investmentForYear(jaar, settings);
+}
+
+export function projectSeries(
+  agg: Agg,
+  settings: Settings,
+  projects: Project[],
+  yearly: (Yearly & { inflatie?: number | null })[],
+  budgetJaar: BudgetJaarOverride[] = [],
+  mjpRows: MjpJaarRow[] = [],
+) {
   const offset = settings.startNetWorth - PLAN_START_NET_WORTH;
   const r = settings.returnRate / 100;
 
@@ -504,8 +519,6 @@ export function projectSeries(agg: Agg, settings: Settings, projects: Project[],
     relief[y] = (relief[y] || 0) + released;
   }
 
-  const yearlyBudgetTotal = yearly.reduce((s, y) => s + (y.budget || 0), 0);
-
   const start = PLAN_START_NET_WORTH + offset;
   const plan = [start];
   const actual = [start];
@@ -515,17 +528,25 @@ export function projectSeries(agg: Agg, settings: Settings, projects: Project[],
   let cumInvest = 0;
   for (let i = 0; i < settings.horizon; i++) {
     const year = PROJECTION_START_YEAR + i;
+    // Operational result now comes from the household's own budget lines
+    // (income − vaste lasten − jaarposten, each indexed per post) instead of
+    // the fixed OP_RESULT table, so the plan reflects what was actually
+    // budgeted. The old table survives inside opResultaatVoorJaar as the
+    // `sheet` comparison figure.
+    const opResultaat = opResultaatVoorJaar(year, agg, settings, yearly, budgetJaar, mjpRows).gebruikt;
+    const investering = investeringVoorJaar(year, settings, mjpRows);
     planNw =
       planNw * (1 + r) +
-      opResultForYear(year, settings) -
-      investmentForYear(year, settings) -
+      opResultaat -
+      investering -
       plannedIncidentalForYear(year, settings, projects);
-    cumInvest += investmentForYear(year, settings);
+    cumInvest += investering;
 
     const deviation = agg.deviationByYear[year] || 0;
     const monthsLoaded = (agg.monthsByYear[year] && agg.monthsByYear[year].size) || 0;
     const yearlyDeviation = monthsLoaded
-      ? yearlyBudgetTotal * (monthsLoaded / 12) - (agg.yearlyByYear[year] || 0)
+      ? jaarpostenVoorJaar(year, yearly, settings, budgetJaar) * (monthsLoaded / 12) -
+        (agg.yearlyByYear[year] || 0)
       : 0;
     cumDelta +=
       deviation + yearlyDeviation + (relief[year] || 0) - (agg.incidentalNetByYear[year] || 0);
@@ -598,6 +619,7 @@ export type MjpJaarRow = {
   inkomen: number | null;
   investeringen: number | null;
   opResultaat: number | null;
+  notitie?: string | null;
 };
 
 /** Index a base-year amount forward. Years before the base deflate symmetrically. */

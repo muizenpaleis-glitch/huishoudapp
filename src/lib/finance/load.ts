@@ -98,6 +98,7 @@ export async function loadFinance(): Promise<FinanceState> {
     inkomen: m.inkomen == null ? null : Number(m.inkomen),
     investeringen: m.investeringen == null ? null : Number(m.investeringen),
     opResultaat: m.opResultaat == null ? null : Number(m.opResultaat),
+    notitie: m.notitie,
   }));
 
   return { transactions, overrides, settings, projects, yearly, budgetJaar, mjpJaar };

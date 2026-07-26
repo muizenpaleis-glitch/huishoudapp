@@ -149,13 +149,23 @@ export async function setJaarpostInflatie(id: string, pct: number | null) {
 
 export async function updateMjpJaar(
   jaar: number,
-  patch: Partial<{ inkomen: number | null; investeringen: number | null; opResultaat: number | null }>,
+  patch: Partial<{
+    inkomen: number | null;
+    investeringen: number | null;
+    opResultaat: number | null;
+    notitie: string | null;
+  }>,
 ) {
-  await prisma.financeMjpJaar.upsert({
+  const row = await prisma.financeMjpJaar.upsert({
     where: { jaar },
     update: patch,
     create: { jaar, ...patch },
   });
+  // Clearing the last field should leave nothing behind, so an "empty" year
+  // really is fully derived again instead of a row of nulls.
+  if (row.inkomen == null && row.investeringen == null && row.opResultaat == null && !row.notitie) {
+    await prisma.financeMjpJaar.delete({ where: { jaar } });
+  }
   refresh();
 }
 
