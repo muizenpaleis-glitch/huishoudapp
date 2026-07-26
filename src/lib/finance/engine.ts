@@ -654,18 +654,66 @@ export function categorieBasisBudget(cat: string, settings: Settings): number {
   return 0;
 }
 
+export type Referentie = {
+  bedrag: number; // €/maand
+  bron: "werkelijk" | "budget";
+  jaar: number; // the year the figure describes
+  maanden: number; // months of data behind it — 0 when it's a budget figure
+};
+
+/** What a year's indexation starts from: last year's *actual* monthly spend
+ *  whenever that year has imported transactions, otherwise last year's budget.
+ *  Budgeting on what a category really cost beats budgeting on what it was
+ *  supposed to cost — but only the first step out of the data is measured;
+ *  every year beyond it chains off the previous year's derived budget, since
+ *  there is nothing to measure yet. */
+export function categorieReferentie(
+  cat: string,
+  jaar: number,
+  agg: Agg,
+  settings: Settings,
+  overrides: BudgetJaarOverride[],
+): Referentie {
+  const vorig = jaar - 1;
+  const werkelijk = werkelijkPerMaandVoorJaar(cat, vorig, agg);
+  if (werkelijk) {
+    return { bedrag: werkelijk.perMaand, bron: "werkelijk", jaar: vorig, maanden: werkelijk.maanden };
+  }
+  if (vorig < PROJECTION_START_YEAR) {
+    return { bedrag: categorieBasisBudget(cat, settings), bron: "budget", jaar: PROJECTION_START_YEAR, maanden: 0 };
+  }
+  return {
+    bedrag: categorieBudgetVoorJaar(cat, vorig, agg, settings, overrides).bedrag,
+    bron: "budget",
+    jaar: vorig,
+    maanden: 0,
+  };
+}
+
 /** Monthly budget for one bank category in one year, plus where it came from. */
 export function categorieBudgetVoorJaar(
   cat: string,
   jaar: number,
+  agg: Agg,
   settings: Settings,
   overrides: BudgetJaarOverride[],
-): { bedrag: number; afgeleid: number; bron: "override" | "afgeleid" } {
-  const afgeleid = geindexeerd(categorieBasisBudget(cat, settings), categorieInflatie(cat, settings), jaar);
+): {
+  bedrag: number;
+  afgeleid: number;
+  bron: "override" | "afgeleid";
+  referentie: Referentie;
+} {
+  const referentie = categorieReferentie(cat, jaar, agg, settings, overrides);
+  // The base year has nothing before it to index from, so its budget is the
+  // budget itself; every later year steps one year forward from its reference.
+  const afgeleid =
+    jaar <= PROJECTION_START_YEAR && referentie.bron === "budget"
+      ? categorieBasisBudget(cat, settings)
+      : referentie.bedrag * (1 + categorieInflatie(cat, settings) / 100);
   const ovr = findOverride(overrides, jaar, "categorie", cat);
   return ovr != null
-    ? { bedrag: ovr, afgeleid, bron: "override" }
-    : { bedrag: afgeleid, afgeleid, bron: "afgeleid" };
+    ? { bedrag: ovr, afgeleid, bron: "override", referentie }
+    : { bedrag: afgeleid, afgeleid, bron: "afgeleid", referentie };
 }
 
 /** Categories to show in a budget year: everything with a budget, plus any
@@ -692,7 +740,7 @@ export function vasteLastenVoorJaar(
 ): number {
   return (
     budgetCategorieen(agg, settings).reduce(
-      (s, c) => s + categorieBudgetVoorJaar(c, jaar, settings, overrides).bedrag,
+      (s, c) => s + categorieBudgetVoorJaar(c, jaar, agg, settings, overrides).bedrag,
       0,
     ) * 12
   );

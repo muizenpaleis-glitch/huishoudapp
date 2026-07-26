@@ -129,22 +129,41 @@ export function BudgetClient({ state, jaarParam }: { state: FinanceState; jaarPa
                       <span className="font-normal text-muted"> · {vorigJaarMaanden} mnd</span>
                     )}
                   </th>
-                  <th className="py-2 pr-3 font-semibold text-right">Geïndexeerd</th>
+                  <th
+                    className="py-2 pr-3 font-semibold text-right"
+                    title="Referentiebedrag + inflatie. De referentie is het werkelijke bedrag van vorig jaar zodra dat jaar is ingeladen (gemarkeerd met ᵂ), anders het begrote bedrag van vorig jaar."
+                  >
+                    Geïndexeerd
+                  </th>
                   <th className="py-2 pr-3 font-semibold text-right">Budget €/mnd</th>
                   <th className="py-2 font-semibold text-right">Inflatie %</th>
                 </tr>
               </thead>
               <tbody>
                 {categorieen.map((c) => {
-                  const b = categorieBudgetVoorJaar(c, jaar, settings, budgetJaar);
+                  const b = categorieBudgetVoorJaar(c, jaar, agg, settings, budgetJaar);
                   const werkelijk = werkelijkPerMaandVoorJaar(c, vorigJaar, agg);
+                  const ref = b.referentie;
                   return (
                     <tr key={c} className="border-b border-divider/60">
                       <td className="py-1.5 pr-3">{c}</td>
                       <td className="py-1.5 pr-3 text-right text-muted">
                         {werkelijk == null ? "—" : fmtEUR0(werkelijk.perMaand)}
                       </td>
-                      <td className="py-1.5 pr-3 text-right text-muted">{fmtEUR0(b.afgeleid)}</td>
+                      <td
+                        className="py-1.5 pr-3 text-right"
+                        style={{ color: ref.bron === "werkelijk" ? "var(--color-ink)" : "var(--color-muted)" }}
+                        title={
+                          ref.bron === "werkelijk"
+                            ? `${fmtEUR0(ref.bedrag)}/mnd werkelijk in ${ref.jaar} (${ref.maanden} mnd) + ${categorieInflatie(c, settings)}% inflatie`
+                            : `${fmtEUR0(ref.bedrag)}/mnd begroot voor ${ref.jaar}${jaar > ref.jaar ? ` + ${categorieInflatie(c, settings)}% inflatie` : ""}`
+                        }
+                      >
+                        {fmtEUR0(b.afgeleid)}
+                        {ref.bron === "werkelijk" && (
+                          <span className="text-[10px] text-muted align-super ml-0.5">w</span>
+                        )}
+                      </td>
                       <td className="py-1.5 pr-3 text-right">
                         <input
                           key={`${c}-${jaar}-${b.bron}`}
@@ -186,7 +205,15 @@ export function BudgetClient({ state, jaarParam }: { state: FinanceState; jaarPa
               </tbody>
             </table>
           </div>
-          <div className="text-[11.5px] text-muted">
+          <div className="text-[11.5px] text-muted leading-relaxed">
+            <b>Geïndexeerd</b> = referentiebedrag + inflatie. Zodra {vorigJaar} is ingeladen is de referentie
+            wat je <b>werkelijk</b> uitgaf (gemarkeerd met <span className="align-super text-[10px]">w</span>
+            ), niet wat je begrootte — beweeg over het bedrag om de opbouw te zien. Voor jaren zonder
+            transacties telt het budget van het jaar ervoor door, zodat de reeks blijft lopen.
+            <br />
+            Werkelijk is het netto saldo van die categorie in {vorigJaar}, gedeeld door het aantal ingeladen
+            maanden — dus een gemiddelde per maand, niet een heel jaar.
+            <br />
             Budget leeg = het geïndexeerde bedrag telt. Een ingevuld bedrag geldt alleen voor {jaar} (oranje
             rand); leegmaken herstelt de indexatie. Zet inflatie op 0 voor posten die niet meestijgen, zoals
             een hypotheek met vaste rente.
