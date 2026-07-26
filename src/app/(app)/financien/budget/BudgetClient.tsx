@@ -21,7 +21,8 @@ import {
   plannedIncidentalForYear,
   werkelijkPerMaandVoorJaar,
   maandenInJaar,
-  ritmeAnalyse,
+  budgetSignalen,
+  type Signaal,
   labelMonth,
   RITME_MIN_MAANDEN,
   PROJECTION_START_YEAR,
@@ -392,13 +393,16 @@ export function BudgetClient({ state, jaarParam }: { state: FinanceState; jaarPa
           </div>
         </Card>
 
-        {/* Ritme-analyse */}
-        <RitmeKaart
+        {/* Aandachtspunten */}
+        <SignalenKaart
           transactions={transactions}
           overrides={overrides}
           settings={settings}
           investIbans={investIbans}
           agg={agg}
+          yearly={yearly}
+          budgetJaar={budgetJaar}
+          budgetteerJaar={jaar}
         />
 
         {/* Inkomen per bron */}
@@ -623,120 +627,190 @@ function InkomenKaart({
   );
 }
 
-/** Cadence check: is anything budgeted per month that really lands once a year,
- *  or vice versa? Runs over the most recent year that actually has imported
- *  data, since that's the only year with something to measure. */
-function RitmeKaart({
+/** What deserves attention in the numbers, ranked by what it costs per year.
+ *  The old ritme-analyse listed every post with a verdict and no way to act on
+ *  it; this shows only the posts where something is off, says it in plain
+ *  language with the concrete amounts, links through to the transactions, and
+ *  offers a button that writes the corrected budget. */
+function SignalenKaart({
   transactions,
   overrides,
   settings,
   investIbans,
   agg,
+  yearly,
+  budgetJaar,
+  budgetteerJaar,
 }: {
   transactions: FinanceState["transactions"];
   overrides: FinanceState["overrides"];
   settings: FinanceState["settings"];
   investIbans: Set<string>;
   agg: ReturnType<typeof aggregate>;
+  yearly: FinanceState["yearly"];
+  budgetJaar: FinanceState["budgetJaar"];
+  budgetteerJaar: number;
 }) {
+  const [, start] = useTransition();
   const dataJaren = Object.keys(agg.monthsByYear).map(Number).sort();
   const analyseJaar = dataJaren.length ? dataJaren[dataJaren.length - 1] : null;
 
-  const posten = useMemo(
+  const signalen = useMemo(
     () =>
       analyseJaar == null
         ? []
-        : ritmeAnalyse(transactions, overrides, settings, investIbans, analyseJaar),
-    [transactions, overrides, settings, investIbans, analyseJaar],
+        : budgetSignalen(
+            transactions,
+            overrides,
+            settings,
+            investIbans,
+            agg,
+            yearly,
+            budgetJaar,
+            analyseJaar,
+          ),
+    [transactions, overrides, settings, investIbans, agg, yearly, budgetJaar, analyseJaar],
   );
-  const adviezen = posten.filter((p) => p.advies !== "past");
 
-  if (analyseJaar == null) {
-    return null;
-  }
+  const [allesTonen, setAllesTonen] = useState(false);
+  if (analyseJaar == null) return null;
+  const maanden = maandenInJaar(analyseJaar, agg);
+  // Only the handful that matter by default — the point is where to start,
+  // not an inventory. The rest stays one click away.
+  const TOP = 6;
+  const zichtbaar = allesTonen ? signalen : signalen.slice(0, TOP);
 
-  const maanden = posten[0]?.maandenTotaal ?? 0;
+  const tekst = (s: Signaal) => {
+    const perMnd = (v: number) => `${fmtEUR0(v)}/mnd`;
+    switch (s.type) {
+      case "meer-dan-budget":
+        return s.soort === "categorie"
+          ? `${perMnd(s.werkelijkPerMaand)} uitgegeven tegen ${perMnd(s.budgetPerMaand)} begroot`
+          : `${fmtEUR0(s.werkelijkPerJaar)} uitgegeven, ${fmtEUR0(s.budgetPerJaar)} begroot voor het hele jaar`;
+      case "minder-dan-budget":
+        return `${perMnd(s.werkelijkPerMaand)} uitgegeven tegen ${perMnd(s.budgetPerMaand)} begroot`;
+      case "geen-budget":
+        return `${perMnd(s.werkelijkPerMaand)} uitgegeven, maar geen budget`;
+      case "geen-uitgaven":
+        return `${perMnd(s.budgetPerMaand)} begroot, niets uitgegeven`;
+      case "netto-ontvangen":
+        return `${perMnd(-s.werkelijkPerMaand)} netto binnengekomen op een uitgavenpost — controleer de triage`;
+      case "onregelmatig":
+        return s.soort === "categorie"
+          ? `viel in ${s.maandenMetUitgave} van de ${s.maandenTotaal} maanden — hoort eerder bij de jaarposten`
+          : `viel in ${s.maandenMetUitgave} van de ${s.maandenTotaal} maanden — hoort eerder in het maandbudget`;
+    }
+  };
+
+  const kleur = (s: Signaal) =>
+    s.type === "onregelmatig"
+      ? "#2F6E8F"
+      : s.verschilPerJaar > 0
+        ? "#B0512C"
+        : s.type === "geen-uitgaven" || s.type === "netto-ontvangen"
+          ? "#A9761C"
+          : "#5C7F55";
 
   return (
     <Card className="p-4.5 flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <div className="text-[13px] font-bold tracking-wider uppercase text-label">
-          Ritme-analyse · {analyseJaar}
+          Aandachtspunten · {analyseJaar}
         </div>
         <div className="text-[12px] text-muted">
-          op basis van {maanden} ingeladen maand{maanden === 1 ? "" : "en"}
+          {maanden} ingeladen maand{maanden === 1 ? "" : "en"}
         </div>
       </div>
 
-      {maanden < RITME_MIN_MAANDEN ? (
-        <div className="text-[12.5px]" style={{ color: "#A9761C" }}>
-          Nog te weinig maanden ingeladen voor een betrouwbaar advies. Met {maanden} maand
-          {maanden === 1 ? "" : "en"} valt elke post die überhaupt voorkomt in 100% van de maanden,
-          waardoor jaarposten er ten onrechte als maandlasten uitzien. Vanaf {RITME_MIN_MAANDEN}{" "}
-          maanden verschijnt het advies. De cijfers hieronder kloppen wel.
-        </div>
-      ) : adviezen.length === 0 ? (
+      {signalen.length === 0 ? (
         <div className="text-[12.5px] text-muted">
-          Geen posten gevonden die duidelijk in het verkeerde ritme staan.
+          Niets bijzonders gevonden in {analyseJaar}. Budgetten en werkelijke uitgaven lopen in de pas.
         </div>
       ) : (
-        <div className="text-[12.5px] text-muted">
-          Deze posten staan mogelijk in het verkeerde ritme. Kijk naar de maanden ernaast voordat je
-          omzet — een post die pas halverwege het jaar begon lijkt ook &ldquo;incidenteel&rdquo;.
-        </div>
-      )}
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-[12.5px] border-collapse min-w-[640px]">
-          <thead>
-            <tr className="text-left text-label border-b border-divider">
-              <th className="py-2 pr-3 font-semibold">Post</th>
-              <th className="py-2 pr-3 font-semibold">Nu</th>
-              <th className="py-2 pr-3 font-semibold text-right">Maanden</th>
-              <th className="py-2 pr-3 font-semibold text-right">Totaal</th>
-              <th className="py-2 font-semibold">Advies</th>
-            </tr>
-          </thead>
-          <tbody>
-            {posten.map((p) => {
-              const kleur =
-                p.advies === "naar-jaarpost"
-                  ? "#A9761C"
-                  : p.advies === "naar-maandbudget"
-                    ? "#2F6E8F"
-                    : "var(--color-muted)";
-              return (
-                <tr key={p.soort + p.naam} className="border-b border-divider/60">
-                  <td className="py-1.5 pr-3">{p.naam}</td>
-                  <td className="py-1.5 pr-3 text-muted">
-                    {p.soort === "categorie" ? "per maand" : "per jaar"}
-                  </td>
-                  <td
-                    className="py-1.5 pr-3 text-right text-muted"
-                    title={p.maanden.map(labelMonth).join(", ")}
-                  >
-                    {p.maandenMetUitgave} van {p.maandenTotaal}
-                  </td>
-                  <td className="py-1.5 pr-3 text-right font-semibold">{fmtEUR0(p.totaal)}</td>
-                  <td className="py-1.5" style={{ color: kleur }}>
-                    {p.advies === "naar-jaarpost"
-                      ? "→ jaarpost"
-                      : p.advies === "naar-maandbudget"
-                        ? "→ maandbudget"
-                        : "past"}
-                  </td>
+        <>
+          <div className="text-[12.5px] text-muted">
+            Alleen posten waar iets opvalt, met het grootste bedrag bovenaan. Klik op een naam om de
+            transacties erachter te zien.
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px] border-collapse min-w-[680px]">
+              <thead>
+                <tr className="text-left text-label border-b border-divider">
+                  <th className="py-2 pr-3 font-semibold">Post</th>
+                  <th className="py-2 pr-3 font-semibold">Wat er opvalt</th>
+                  <th className="py-2 pr-3 font-semibold text-right">Scheelt per jaar</th>
+                  <th className="py-2 font-semibold"></th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div className="text-[11.5px] text-muted">
-        Regel: een maandpost die in ten hoogste een derde van de maanden voorkomt is kandidaat voor
-        het jaarblok; een jaarpost die in minstens twee derde van de maanden voorkomt hoort eerder in
-        het maandbudget. Posten onder {fmtEUR0(150)} totaal blijven buiten beschouwing. Beweeg over
-        het maandental om te zien in welke maanden het viel.
-      </div>
+              </thead>
+              <tbody>
+                {zichtbaar.map((s) => (
+                  <tr key={s.soort + s.naam} className="border-b border-divider/60">
+                    <td className="py-1.5 pr-3">
+                      <Link
+                        href={`/financien?${s.soort === "jaarpost" ? "jaarpost" : "categorie"}=${encodeURIComponent(s.naam)}&jaar=${analyseJaar}`}
+                        className="text-ink-soft hover:text-accent underline decoration-dotted underline-offset-2"
+                        title={`Toon de transacties van ${s.naam} in ${analyseJaar}`}
+                      >
+                        {s.naam}
+                      </Link>
+                      <span className="text-muted"> · {s.soort === "jaarpost" ? "jaarpost" : "maandbudget"}</span>
+                    </td>
+                    <td className="py-1.5 pr-3" title={s.maanden.map(labelMonth).join(", ")}>
+                      {tekst(s)}
+                    </td>
+                    <td
+                      className="py-1.5 pr-3 text-right font-semibold"
+                      style={{ color: kleur(s) }}
+                    >
+                      {s.type === "onregelmatig" ? "—" : signedEUR(s.verschilPerJaar)}
+                    </td>
+                    <td className="py-1.5 text-right">
+                      {s.voorstel != null && (
+                        <button
+                          onClick={() =>
+                            start(() =>
+                              setBudgetJaar(budgetteerJaar, s.soort, s.naam, s.voorstel as number),
+                            )
+                          }
+                          className="px-2.5 py-1 rounded-full border border-input-border text-[11.5px] font-semibold text-ink-soft whitespace-nowrap"
+                          title={`Zet het budget voor ${budgetteerJaar} op ${
+                            s.soort === "categorie"
+                              ? `${fmtEUR0(s.voorstel)}/mnd`
+                              : `${fmtEUR0(s.voorstel)}/jaar`
+                          }`}
+                        >
+                          Overnemen in {budgetteerJaar}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {signalen.length > TOP && (
+            <button
+              onClick={() => setAllesTonen((v) => !v)}
+              className="self-start px-3.5 py-2 rounded-full border border-input-border text-[12.5px] font-semibold text-ink-soft"
+            >
+              {allesTonen ? `Toon alleen de grootste ${TOP}` : `Toon alle ${signalen.length} punten`}
+            </button>
+          )}
+          <div className="text-[11.5px] text-muted leading-relaxed">
+            &ldquo;Scheelt per jaar&rdquo; is werkelijk min begroot op jaarbasis — rood kost geld,
+            groen levert het op. Bij maandbudgetten wordt het maandgemiddelde over {maanden} maand
+            {maanden === 1 ? "" : "en"} doorgetrokken naar twaalf. Posten die minder dan {fmtEUR0(250)}
+            /jaar of minder dan 20% afwijken blijven buiten deze lijst.
+            {maanden < RITME_MIN_MAANDEN && (
+              <>
+                {" "}
+                Met minder dan {RITME_MIN_MAANDEN} maanden wordt niet gekeken of een post in het
+                verkeerde blok staat: elke post die voorkomt zit dan in 100% van de maanden.
+              </>
+            )}
+          </div>
+        </>
+      )}
     </Card>
   );
 }

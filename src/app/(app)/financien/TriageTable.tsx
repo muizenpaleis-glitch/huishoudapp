@@ -32,7 +32,8 @@ export function TriageTable({
   projects,
   yearly,
   postFilter,
-  postFilterJaar,
+  catFilter,
+  filterJaar,
 }: {
   transactions: Tx[];
   overrides: Overrides;
@@ -41,11 +42,15 @@ export function TriageTable({
   projects: Project[];
   yearly: Yearly[];
   postFilter?: string;
-  postFilterJaar?: number;
+  catFilter?: string;
+  filterJaar?: number;
 }) {
   const [pending, startTransition] = useTransition();
   const [filter, setFilter] = useState<"all" | ClassName>(postFilter ? "yearly" : "all");
+  // Deep link from Budgetteren: narrow to one yearly post or one category so
+  // the click lands on the transactions the figure is made of.
   const [post, setPost] = useState<string | null>(postFilter ?? null);
+  const [cat, setCat] = useState<string | null>(catFilter ?? null);
   const [search, setSearch] = useState("");
   type SortKey = "datum" | "omschrijving" | "bedrag" | null;
   const [sortKey, setSortKey] = useState<SortKey>(null);
@@ -63,12 +68,10 @@ export function TriageTable({
   const rows = useMemo(() => {
     let list = transactions.map((t) => ({ t, e: effective(t, overrides, settings, investIbans) }));
     if (filter !== "all") list = list.filter((r) => r.e.cls === filter);
-    if (post) {
-      list = list.filter(
-        (r) =>
-          r.e.project === post &&
-          (postFilterJaar == null || parseInt(r.t.date.slice(0, 4), 10) === postFilterJaar),
-      );
+    if (post) list = list.filter((r) => r.e.project === post);
+    if (cat) list = list.filter((r) => r.e.bankCat === cat);
+    if ((post || cat) && filterJaar != null) {
+      list = list.filter((r) => parseInt(r.t.date.slice(0, 4), 10) === filterJaar);
     }
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -89,7 +92,7 @@ export function TriageTable({
       });
     }
     return list;
-  }, [transactions, overrides, settings, investIbans, filter, post, postFilterJaar, search, sortKey, sortDir]);
+  }, [transactions, overrides, settings, investIbans, filter, post, cat, filterJaar, search, sortKey, sortDir]);
 
   // Alle categorieën voor de dropdown: de vaste Jaarbegroting-lijst plus
   // elke categorie die al ergens in de data voorkomt (bijv. via een eerdere
@@ -164,16 +167,22 @@ export function TriageTable({
         />
       </div>
 
-      {post && (
+      {(post || cat) && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[12px] text-muted">Gefilterd op jaarpost:</span>
+          <span className="text-[12px] text-muted">
+            Gefilterd op {post ? "jaarpost" : "categorie"}:
+          </span>
           <button
-            onClick={() => setPost(null)}
+            onClick={() => {
+              setPost(null);
+              setCat(null);
+              setFilter("all");
+            }}
             className="px-3 py-1.5 rounded-full text-[12px] font-semibold border border-accent text-accent"
             title="Filter opheffen"
           >
-            {post}
-            {postFilterJaar ? ` · ${postFilterJaar}` : ""} ✕
+            {post ?? cat}
+            {filterJaar ? ` · ${filterJaar}` : ""} ✕
           </button>
         </div>
       )}

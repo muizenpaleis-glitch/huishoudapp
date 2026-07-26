@@ -40,11 +40,13 @@ import {
 export function FinancienClient({
   state,
   jaarpost,
-  jaarpostJaar,
+  categorie,
+  filterJaar,
 }: {
   state: FinanceState;
   jaarpost?: string;
-  jaarpostJaar?: string;
+  categorie?: string;
+  filterJaar?: string;
 }) {
   const { transactions, overrides, settings, projects, yearly, budgetJaar, mjpJaar, inkomsten } =
     state;
@@ -409,8 +411,8 @@ export function FinancienClient({
               transactions the figure is made of instead of the whole list. */}
           <Collapsible
             title="Transactie-triage"
-            defaultOpen={!!jaarpost}
-            scrollOnMount={!!jaarpost}
+            defaultOpen={!!(jaarpost || categorie)}
+            scrollOnMount={!!(jaarpost || categorie)}
           >
             <TriageTable
               transactions={transactions}
@@ -420,7 +422,8 @@ export function FinancienClient({
               projects={projects}
               yearly={yearly}
               postFilter={jaarpost}
-              postFilterJaar={jaarpostJaar ? parseInt(jaarpostJaar, 10) : undefined}
+              catFilter={categorie}
+              filterJaar={filterJaar ? parseInt(filterJaar, 10) : undefined}
             />
           </Collapsible>
 

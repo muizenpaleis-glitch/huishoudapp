@@ -908,93 +908,201 @@ export function opResultaatVoorJaar(
 }
 
 /* ================================================================
-   8. RITME-ANALYSE
-   Which posts are budgeted at the wrong cadence? A category budgeted
-   per month but only actually paid once or twice a year belongs in the
-   yearly block, and a yearly item that turns up every month belongs in
-   the monthly budget. Computed straight from transactions so it covers
-   both classes, and reports the months it saw so the household can
-   sanity-check the advice instead of trusting it blindly.
+   8. BUDGETSIGNALEN
+   Not "here is a table of every post with a verdict", but "here are
+   the few posts where something is off, biggest money first, with the
+   number that makes it actionable". Each post yields at most one
+   signal so the list stays short enough to actually read.
    ================================================================ */
 
-export type RitmeAdvies = "naar-jaarpost" | "naar-maandbudget" | "past";
+export type SignaalType =
+  | "meer-dan-budget"
+  | "minder-dan-budget"
+  | "geen-budget"
+  | "geen-uitgaven"
+  | "netto-ontvangen"
+  | "onregelmatig";
 
-export type RitmePost = {
+export type Signaal = {
   naam: string;
   soort: "categorie" | "jaarpost";
+  type: SignaalType;
+  budgetPerJaar: number;
+  werkelijkPerJaar: number; // extrapolated to a full year for categories
+  verschilPerJaar: number; // werkelijk − budget; the ranking key
+  budgetPerMaand: number;
+  werkelijkPerMaand: number;
   maandenMetUitgave: number;
   maandenTotaal: number;
   maanden: string[]; // 'YYYY-MM', sorted
-  totaal: number;
-  perActieveMaand: number;
-  advies: RitmeAdvies;
+  /** Amount the UI can write straight into the budget: €/maand for a
+   *  category, €/jaar for a yearly post, rounded to whole euros. Null when
+   *  there is nothing sensible to copy — an unused budget, money that came in
+   *  rather than went out, or a post that belongs in another block. */
+  voorstel: number | null;
 };
 
+// Ignore anything under this per year: a €40 drift is noise, not a decision.
+const SIGNAAL_MIN_VERSCHIL = 250;
+const SIGNAAL_MIN_RELATIEF = 0.2;
 // A post seen in at most a third of the loaded months is lumpy; one seen in at
-// least two thirds is steady. Below the floor the move isn't worth the effort.
+// least two thirds is steady enough to belong in the monthly budget.
 const RITME_LUMPY = 1 / 3;
 const RITME_STEADY = 2 / 3;
 const RITME_MIN_BEDRAG = 150;
-// With only one or two months loaded every post that occurs at all sits in
-// 100% of them, which would flag every yearly item as "really monthly". Below
-// this many months the ratio carries no signal, so no advice is given.
+// With one or two months loaded every post that occurs at all sits in 100% of
+// them, so the ratio carries no signal below this many months.
 export const RITME_MIN_MAANDEN = 4;
 
-export function ritmeAnalyse(
+/** Per post: in how many of the loaded months of `jaar` did money actually go
+ *  out? Used for the cadence check; kept separate so the amount logic below
+ *  stays readable. */
+function maandenMetUitgave(
   transactions: Tx[],
   overrides: Overrides,
   settings: Settings,
   investIbans: Set<string>,
   jaar: number,
-): RitmePost[] {
-  const groepen = new Map<string, { soort: "categorie" | "jaarpost"; maanden: Set<string>; totaal: number }>();
-  const alleMaanden = new Set<string>();
-
+): { perPost: Map<string, Set<string>>; totaal: number } {
+  const perPost = new Map<string, Set<string>>();
+  const alle = new Set<string>();
   for (const t of transactions) {
     if (parseInt(t.date.slice(0, 4), 10) !== jaar) continue;
     const e = effective(t, overrides, settings, investIbans);
     if (e.cls === "exclude") continue;
     const maand = t.date.slice(0, 7);
-    alleMaanden.add(maand);
+    alle.add(maand);
     if (e.cls !== "recurring" && e.cls !== "yearly") continue;
-    // Only outgoing money says something about spending cadence.
-    if (t.amount >= 0) continue;
-
-    const soort = e.cls === "yearly" ? ("jaarpost" as const) : ("categorie" as const);
-    const naam = e.cls === "yearly" ? e.project || "Onbekende jaarpost" : e.bankCat;
-    const key = soort + "|" + naam;
-    const g = groepen.get(key) ?? { soort, maanden: new Set<string>(), totaal: 0 };
-    g.maanden.add(maand);
-    g.totaal += -t.amount;
-    groepen.set(key, g);
+    if (t.amount >= 0) continue; // only outgoing money says something about cadence
+    const key =
+      e.cls === "yearly" ? "jaarpost|" + (e.project || "Onbekende jaarpost") : "categorie|" + e.bankCat;
+    (perPost.get(key) ?? perPost.set(key, new Set()).get(key)!).add(maand);
   }
+  return { perPost, totaal: alle.size };
+}
 
-  const maandenTotaal = alleMaanden.size;
+export function budgetSignalen(
+  transactions: Tx[],
+  overrides: Overrides,
+  settings: Settings,
+  investIbans: Set<string>,
+  agg: Agg,
+  yearly: (Yearly & { inflatie?: number | null })[],
+  budgetOverrides: BudgetJaarOverride[],
+  analyseJaar: number,
+): Signaal[] {
+  const { perPost, totaal: maandenTotaal } = maandenMetUitgave(
+    transactions,
+    overrides,
+    settings,
+    investIbans,
+    analyseJaar,
+  );
   if (maandenTotaal === 0) return [];
 
-  return [...groepen.entries()]
-    .map(([key, g]) => {
-      const naam = key.slice(key.indexOf("|") + 1);
-      const ratio = g.maanden.size / maandenTotaal;
-      let advies: RitmeAdvies = "past";
-      if (g.totaal >= RITME_MIN_BEDRAG && maandenTotaal >= RITME_MIN_MAANDEN) {
-        if (g.soort === "categorie" && ratio <= RITME_LUMPY) advies = "naar-jaarpost";
-        else if (g.soort === "jaarpost" && ratio >= RITME_STEADY) advies = "naar-maandbudget";
-      }
-      return {
-        naam,
-        soort: g.soort,
-        maandenMetUitgave: g.maanden.size,
-        maandenTotaal,
-        maanden: [...g.maanden].sort(),
-        totaal: g.totaal,
-        perActieveMaand: g.totaal / g.maanden.size,
-        advies,
-      };
-    })
-    .sort((a, b) => {
-      // Advice first, then biggest amounts — the ones worth acting on float up.
-      const rang = (p: RitmePost) => (p.advies === "past" ? 1 : 0);
-      return rang(a) - rang(b) || b.totaal - a.totaal;
+  const uit: Signaal[] = [];
+  const ritmeBruikbaar = maandenTotaal >= RITME_MIN_MAANDEN;
+
+  const basis = (key: string) => {
+    const m = perPost.get(key);
+    return { maanden: m ? [...m].sort() : [], metUitgave: m ? m.size : 0 };
+  };
+
+  // ── Categorieën: budget is €/maand, werkelijk is een maandgemiddelde ──
+  for (const cat of budgetCategorieen(agg, settings)) {
+    const w = werkelijkPerMaandVoorJaar(cat, analyseJaar, agg);
+    if (!w) continue;
+    const budgetPerMaand = categorieBudgetVoorJaar(cat, analyseJaar, agg, settings, budgetOverrides).bedrag;
+    const werkelijkPerMaand = w.perMaand;
+    const { maanden, metUitgave } = basis("categorie|" + cat);
+    const totaalUit = werkelijkPerMaand * w.maanden;
+    const verschilPerJaar = (werkelijkPerMaand - budgetPerMaand) * 12;
+
+    let type: SignaalType | null = null;
+    let voorstel: number | null = null;
+    if (budgetPerMaand === 0 && werkelijkPerMaand > 0) {
+      type = "geen-budget";
+      voorstel = Math.round(werkelijkPerMaand);
+    } else if (budgetPerMaand > 0 && werkelijkPerMaand === 0) {
+      type = "geen-uitgaven";
+    } else if (werkelijkPerMaand < 0) {
+      // Net money coming in on a spending category — usually a refund or a
+      // settlement booked here. Copying it into the budget would be nonsense,
+      // so no proposal: this is a triage question, not a budget question.
+      type = "netto-ontvangen";
+    } else if (
+      ritmeBruikbaar &&
+      totaalUit >= RITME_MIN_BEDRAG &&
+      metUitgave > 0 &&
+      metUitgave / maandenTotaal <= RITME_LUMPY
+    ) {
+      // Lumpy spend inside a monthly budget: the budget isn't wrong, the block is.
+      type = "onregelmatig";
+    } else if (
+      Math.abs(verschilPerJaar) >= SIGNAAL_MIN_VERSCHIL &&
+      budgetPerMaand > 0 &&
+      Math.abs(werkelijkPerMaand - budgetPerMaand) / budgetPerMaand >= SIGNAAL_MIN_RELATIEF
+    ) {
+      type = verschilPerJaar > 0 ? "meer-dan-budget" : "minder-dan-budget";
+      voorstel = Math.round(werkelijkPerMaand);
+    }
+    if (!type) continue;
+
+    uit.push({
+      naam: cat,
+      soort: "categorie",
+      type,
+      budgetPerJaar: budgetPerMaand * 12,
+      werkelijkPerJaar: werkelijkPerMaand * 12,
+      verschilPerJaar,
+      budgetPerMaand,
+      werkelijkPerMaand,
+      maandenMetUitgave: metUitgave,
+      maandenTotaal,
+      maanden,
+      voorstel,
     });
+  }
+
+  // ── Jaarposten: budget is €/jaar, werkelijk is een lopend totaal ──
+  // A part-year total under budget means nothing (the bill may still come), so
+  // underspend is deliberately not flagged here.
+  for (const post of yearly) {
+    const budgetPerJaar = jaarpostVoorJaar(post, analyseJaar, settings, budgetOverrides, agg).bedrag;
+    const werkelijkPerJaar = agg.yearlyByItemYear[post.name + "|" + analyseJaar] || 0;
+    const { maanden, metUitgave } = basis("jaarpost|" + post.name);
+    const verschilPerJaar = werkelijkPerJaar - budgetPerJaar;
+
+    let type: SignaalType | null = null;
+    let voorstel: number | null = null;
+    if (
+      ritmeBruikbaar &&
+      werkelijkPerJaar >= RITME_MIN_BEDRAG &&
+      metUitgave / maandenTotaal >= RITME_STEADY
+    ) {
+      type = "onregelmatig";
+    } else if (verschilPerJaar >= SIGNAAL_MIN_VERSCHIL) {
+      type = "meer-dan-budget";
+      voorstel = Math.round(werkelijkPerJaar);
+    }
+    if (!type) continue;
+
+    uit.push({
+      naam: post.name,
+      soort: "jaarpost",
+      type,
+      budgetPerJaar,
+      werkelijkPerJaar,
+      verschilPerJaar,
+      budgetPerMaand: budgetPerJaar / 12,
+      werkelijkPerMaand: werkelijkPerJaar / 12,
+      maandenMetUitgave: metUitgave,
+      maandenTotaal,
+      maanden,
+      voorstel,
+    });
+  }
+
+  // Biggest money first — that is the only ordering that tells you where to start.
+  return uit.sort((a, b) => Math.abs(b.verschilPerJaar) - Math.abs(a.verschilPerJaar));
 }
