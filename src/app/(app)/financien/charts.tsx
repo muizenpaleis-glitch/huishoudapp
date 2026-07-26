@@ -59,6 +59,12 @@ export function ProjectionChart({
             </text>
           </g>
         ))}
+        {/* zero line — 0 is always inside the domain (see allVals), and the
+            actual line can dip negative, so this is a real reference point */}
+        <line x1={padL} x2={W - padR} y1={y(0)} y2={y(0)} stroke={INK} strokeWidth={1.25} opacity={0.45} />
+        <text x={padL + 3} y={y(0) - 3} fontSize={8.5} fill={INK} opacity={0.6}>
+          €0
+        </text>
         {/* critical threshold */}
         <line
           x1={padL}

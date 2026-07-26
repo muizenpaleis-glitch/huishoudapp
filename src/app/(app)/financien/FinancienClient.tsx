@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { Card } from "@/components/ui";
-import { fmtEUR, fmtEUR0, signedEUR } from "@/lib/finance/format";
+import { fmtEUR0, signedEUR } from "@/lib/finance/format";
 import {
   rebuildInvestIbans,
   aggregate,
@@ -72,10 +72,24 @@ export function FinancienClient({ state }: { state: FinanceState }) {
 
   const buffer = computeBufferActual(aggFull, settings);
   const nwTotal = buffer + settings.personalSavings + settings.investmentValue;
-  const endActual = actual[actual.length - 1];
-  const endPlan = plan[plan.length - 1];
-  const endYear = PROJECTION_START_YEAR + settings.horizon;
   const periodTxt = gran === "all" ? "alle data" : period;
+
+  // ── KPI figures (the five headline numbers) ──
+  // PROJECTION_START_YEAR is the year the whole budget model describes; it
+  // doubles as "current year" here. Revisit at the year-end rollover.
+  const jaar = PROJECTION_START_YEAR;
+  const yearlyBudgetTotal = yearly.reduce((s, y) => s + (y.budget || 0), 0);
+  const incidentalBudget = plannedIncidentalForYear(jaar, settings, projects);
+  const aInc = aggFull.recurringIncomeByYear[jaar] || 0;
+  const aSpend = aggFull.recurringSpendByYear[jaar] || 0;
+  const netResultActual = aInc - aSpend - aggFull.yearlyTotal - aggFull.incidentalTotal;
+  const bufferEindJaar = actual[1]; // buffer at 31-12 of the base year, actual line
+  const planEindJaar = plan[1];
+
+  function restLabel(besteed: number, budget: number) {
+    const rest = budget - besteed;
+    return rest >= 0 ? `${fmtEUR0(rest)} over` : `${fmtEUR0(-rest)} te veel`;
+  }
 
   // projection chart years/labels
   const jaren = useMemo(() => {
@@ -166,43 +180,35 @@ export function FinancienClient({ state }: { state: FinanceState }) {
           </span>
         </Card>
 
-        {/* KPI tiles (6) */}
-        <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-2.5">
-          <Kpi label="Inkomen / mnd" value={fmtEUR(aggView.incomePerMonth)} sub={`${periodTxt} · budget ${fmtEUR0(settings.monthlyIncome)}`} />
-          <Kpi label="Uitgaven / mnd" value={fmtEUR(aggView.spendPerMonth)} sub={`${periodTxt} · budget ${fmtEUR0(settings.monthlyBudget)}`} />
+        {/* KPI tiles (5) */}
+        <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-5 gap-2.5">
           <Kpi
-            label="Bruto waarde vs budget"
-            value={signedEUR(aggFull.deviationTotal)}
-            valueColor={aggFull.deviationTotal >= 0 ? "#5C7F55" : "#B0512C"}
-            sub="geladen maanden vs plan"
+            label="Jaarposten gerealiseerd"
+            value={fmtEUR0(aggFull.yearlyTotal)}
+            sub={`van ${fmtEUR0(yearlyBudgetTotal)} · ${restLabel(aggFull.yearlyTotal, yearlyBudgetTotal)}`}
           />
-          <Kpi label="Incidentele projecten" value={fmtEUR(aggFull.incidentalTotal)} sub={`${aggFull.incidentalCount} transactie(s)`} />
-          <Kpi label="Overboekingen (excl.)" value={fmtEUR(aggFull.excludedTotal)} sub="intern verkeer" />
           <Kpi
-            label={`Vermogen @ ${endYear}`}
-            value={fmtEUR0(endActual)}
-            sub={`${signedEUR(endActual - endPlan)} vs plan`}
+            label="Incidenteel gerealiseerd"
+            value={fmtEUR0(aggFull.incidentalTotal)}
+            sub={`van ${fmtEUR0(incidentalBudget)} · ${restLabel(aggFull.incidentalTotal, incidentalBudget)}`}
+          />
+          <Kpi
+            label={`Netto resultaat ${jaar}`}
+            value={signedEUR(netResultActual)}
+            valueColor={netResultActual >= 0 ? "#5C7F55" : "#B0512C"}
+            sub="inkomsten − alle uitgaven"
+          />
+          <Kpi
+            label={`Buffer 31-12-${jaar}`}
+            value={fmtEUR0(bufferEindJaar)}
+            sub={`${signedEUR(bufferEindJaar - planEindJaar)} vs plan`}
+          />
+          <Kpi
+            label="Totaalbeeld vermogen"
+            value={fmtEUR0(nwTotal)}
+            sub="buffer + spaargeld + beleggingen"
           />
         </div>
-
-        {/* Net worth complete picture */}
-        <Card className="p-4.5 flex flex-col gap-3.5">
-          <div className="flex items-baseline justify-between">
-            <div className="text-[13px] font-bold tracking-wider uppercase text-label">Netto vermogen — totaalbeeld</div>
-            <div className="text-[20px] font-bold">{fmtEUR0(nwTotal)}</div>
-          </div>
-          <div className="h-2.5 rounded-full overflow-hidden flex bg-track">
-            <div style={{ width: `${(buffer / nwTotal) * 100}%`, background: "#C4633B" }} />
-            <div style={{ width: `${(settings.personalSavings / nwTotal) * 100}%`, background: "#5C7F55" }} />
-            <div style={{ width: `${(settings.investmentValue / nwTotal) * 100}%`, background: "#6C5B8C" }} />
-          </div>
-          <NwRow label="Vrij besteedbaar (buffer)" dot="#C4633B" value={buffer} note="afgeleid uit imports" />
-          <NwPotRow label="Persoonlijke besparingen" dot="#5C7F55" value={settings.personalSavings} field="personalSavings" />
-          <NwPotRow label="Beleggingen (marktwaarde)" dot="#6C5B8C" value={settings.investmentValue} field="investmentValue" />
-        </Card>
-
-        {/* Budget framework */}
-        <BudgetFramework aggFull={aggFull} settings={settings} projects={projects} yearly={yearly} plan={plan} />
 
         {/* Projection */}
         <Card className="p-4.5 flex flex-col gap-3 md:col-span-2">
@@ -274,6 +280,33 @@ export function FinancienClient({ state }: { state: FinanceState }) {
         {/* Savings & investments */}
         <div className="md:col-span-2">
           <SavingsSection aggFull={aggFull} investDetected={investDetected} />
+        </div>
+
+        {/* Detail/naslag: collapsed by default, but kept in the main grid (not
+            the web-only block) so they stay readable on mobile. */}
+        <div className="md:col-span-2">
+          <Collapsible title="Netto vermogen — totaalbeeld" defaultOpen={false}>
+            <div className="flex flex-col gap-3.5">
+              <div className="flex items-baseline justify-between">
+                <div className="text-[13px] text-muted">Totaal</div>
+                <div className="text-[20px] font-bold">{fmtEUR0(nwTotal)}</div>
+              </div>
+              <div className="h-2.5 rounded-full overflow-hidden flex bg-track">
+                <div style={{ width: `${nwTotal > 0 ? (Math.max(0, buffer) / nwTotal) * 100 : 0}%`, background: "#C4633B" }} />
+                <div style={{ width: `${nwTotal > 0 ? (settings.personalSavings / nwTotal) * 100 : 0}%`, background: "#5C7F55" }} />
+                <div style={{ width: `${nwTotal > 0 ? (settings.investmentValue / nwTotal) * 100 : 0}%`, background: "#6C5B8C" }} />
+              </div>
+              <NwRow label="Vrij besteedbaar (buffer)" dot="#C4633B" value={buffer} note="afgeleid uit imports" />
+              <NwPotRow label="Persoonlijke besparingen" dot="#5C7F55" value={settings.personalSavings} field="personalSavings" />
+              <NwPotRow label="Beleggingen (marktwaarde)" dot="#6C5B8C" value={settings.investmentValue} field="investmentValue" />
+            </div>
+          </Collapsible>
+        </div>
+
+        <div className="md:col-span-2">
+          <Collapsible title="Budgetraamwerk" defaultOpen={false}>
+            <BudgetFramework aggFull={aggFull} settings={settings} projects={projects} yearly={yearly} plan={plan} />
+          </Collapsible>
         </div>
 
         {/* ── Web-only: CSV upload, triage, editors, settings, advanced ── */}
@@ -577,10 +610,8 @@ function BudgetFramework({
   const bufferActual = computeBufferActual(aggFull, settings);
 
   return (
-    <Card className="p-4.5 flex flex-col gap-4 md:col-span-2">
-      <div className="text-[13px] font-bold tracking-wider uppercase text-label">
-        Budgetraamwerk <span className="text-muted font-normal normal-case">· {year} begroot vs werkelijk</span>
-      </div>
+    <div className="flex flex-col gap-4">
+      <div className="text-[12px] text-muted">{year} begroot vs werkelijk</div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
         <div className="flex flex-col">
           <div className="text-[11px] uppercase tracking-wider text-muted mb-1">Begrote opbouw (heel jaar)</div>
@@ -617,7 +648,7 @@ function BudgetFramework({
           ? `Dat laat een gat van ${fmtEUR0(Math.abs(recoGap))} tussen de component-buffer (${fmtEUR0(bufferEnd)}) en die van het plan (${fmtEUR0(endPlan)}).`
           : "Deze sluiten op elkaar aan."}
       </div>
-    </Card>
+    </div>
   );
 }
 
