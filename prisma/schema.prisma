@@ -202,9 +202,16 @@ model FinanceSettings {
   savingsAccounts            String[]
   investmentAccounts         String[]
   savingsIncidentalThreshold Decimal  @db.Decimal(12, 2)
-  categoryBudgets            Json // Record<bankCategory, monthlyBudget>
+  categoryBudgets            Json // Record<bankCategory, monthlyBudget> — base-year budgets
   personalSavings            Decimal  @db.Decimal(12, 2)
   investmentValue            Decimal  @db.Decimal(12, 2)
+  // Multi-year planning: how each component is indexed forward from the base
+  // year. categoryInflatie holds per-category percentages (e.g. a fixed-rate
+  // mortgage stays at 0 while groceries track inflation); categories without
+  // an entry fall back to inflatieDefault.
+  categoryInflatie           Json     @default("{}") // Record<bankCategory, %/jr>
+  inflatieDefault            Decimal  @db.Decimal(6, 3) @default(2.5)
+  inkomenGroei               Decimal  @db.Decimal(6, 3) @default(2.0)
 }
 
 model FinanceTx {
@@ -239,10 +246,35 @@ model FinanceProject {
 }
 
 model FinanceYearly {
-  id       String  @id @default(cuid())
+  id       String   @id @default(cuid())
   naam     String
-  budget   Decimal @db.Decimal(12, 2)
-  volgorde Int     @default(0)
+  budget   Decimal  @db.Decimal(12, 2)
+  volgorde Int      @default(0)
+  inflatie Decimal? @db.Decimal(6, 3) // null = inflatieDefault
+}
+
+// Explicit per-year budget overrides. A row here beats the indexed value
+// derived from the base-year budget; deleting the row restores the derivation
+// (so "leeg = afgeleid" holds, mirroring how setCategoryBudget already works).
+model FinanceBudgetJaar {
+  id     String  @id @default(cuid())
+  jaar   Int
+  soort  String // 'categorie' | 'jaarpost'
+  naam   String // bank category name, or yearly-item name
+  bedrag Decimal @db.Decimal(12, 2) // categorie = €/maand, jaarpost = €/jaar
+
+  @@unique([jaar, soort, naam])
+}
+
+// Per-year knobs at MJP level. Every column is nullable: null means "derive it"
+// (income from base × growth, investments from the INVESTMENTS table,
+// opResultaat from income − vaste lasten − jaarposten).
+model FinanceMjpJaar {
+  jaar          Int      @id
+  inkomen       Decimal? @db.Decimal(12, 2)
+  investeringen Decimal? @db.Decimal(12, 2)
+  opResultaat   Decimal? @db.Decimal(12, 2)
+  notitie       String?
 }
 
 // ───────────────────────── Huis (Home Assistant) ─────────────────────────

@@ -11,6 +11,8 @@ import { SAMPLE_CSV } from "./sample-csv";
 export async function seedFinanceStructure(prisma: PrismaClient) {
   await prisma.financeOverride.deleteMany();
   await prisma.financeTx.deleteMany();
+  await prisma.financeBudgetJaar.deleteMany();
+  await prisma.financeMjpJaar.deleteMany();
   await prisma.financeProject.deleteMany();
   await prisma.financeYearly.deleteMany();
   await prisma.financeSettings.deleteMany();
@@ -31,6 +33,9 @@ export async function seedFinanceStructure(prisma: PrismaClient) {
       categoryBudgets: DEFAULT_SETTINGS.categoryBudgets,
       personalSavings: DEFAULT_SETTINGS.personalSavings,
       investmentValue: DEFAULT_SETTINGS.investmentValue,
+      categoryInflatie: DEFAULT_SETTINGS.categoryInflatie,
+      inflatieDefault: DEFAULT_SETTINGS.inflatieDefault,
+      inkomenGroei: DEFAULT_SETTINGS.inkomenGroei,
     },
   });
 

@@ -7,7 +7,10 @@ import { seedFinance } from "@/lib/finance/seed";
 import type { Override } from "@/lib/finance/engine";
 
 function refresh() {
-  revalidatePath("/financien");
+  // "layout" makes this cover the sub-routes too (/financien/budget, /mjp).
+  // A bare revalidatePath("/financien") is an exact match and would leave
+  // those pages serving stale figures after an edit.
+  revalidatePath("/financien", "layout");
 }
 
 // ── CSV upload (web only) ──────────────────────────────────────────────
@@ -103,6 +106,56 @@ export async function setCategoryBudget(cat: string, value: number | null) {
   if (value === null || Number.isNaN(value)) delete budgets[cat];
   else budgets[cat] = value;
   await prisma.financeSettings.update({ where: { id: 1 }, data: { categoryBudgets: budgets } });
+  refresh();
+}
+
+// ── Budgetteren: per-year overrides + indexation (web only) ────────────
+// Passing null deletes the row so the derived (indexed) value takes over
+// again — "leeg = afgeleid", same contract as setCategoryBudget above.
+export async function setBudgetJaar(
+  jaar: number,
+  soort: "categorie" | "jaarpost",
+  naam: string,
+  bedrag: number | null,
+) {
+  if (bedrag === null || Number.isNaN(bedrag)) {
+    await prisma.financeBudgetJaar.deleteMany({ where: { jaar, soort, naam } });
+  } else {
+    await prisma.financeBudgetJaar.upsert({
+      where: { jaar_soort_naam: { jaar, soort, naam } },
+      update: { bedrag },
+      create: { jaar, soort, naam, bedrag },
+    });
+  }
+  refresh();
+}
+
+export async function setCategorieInflatie(cat: string, pct: number | null) {
+  const row = await prisma.financeSettings.findUniqueOrThrow({ where: { id: 1 } });
+  const infl = { ...((row.categoryInflatie as Record<string, number>) || {}) };
+  if (pct === null || Number.isNaN(pct)) delete infl[cat];
+  else infl[cat] = pct;
+  await prisma.financeSettings.update({ where: { id: 1 }, data: { categoryInflatie: infl } });
+  refresh();
+}
+
+export async function setJaarpostInflatie(id: string, pct: number | null) {
+  await prisma.financeYearly.update({
+    where: { id },
+    data: { inflatie: pct === null || Number.isNaN(pct) ? null : pct },
+  });
+  refresh();
+}
+
+export async function updateMjpJaar(
+  jaar: number,
+  patch: Partial<{ inkomen: number | null; investeringen: number | null; opResultaat: number | null }>,
+) {
+  await prisma.financeMjpJaar.upsert({
+    where: { jaar },
+    update: patch,
+    create: { jaar, ...patch },
+  });
   refresh();
 }
 

@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Card } from "@/components/ui";
 import { fmtEUR0, signedEUR } from "@/lib/finance/format";
 import {
@@ -171,6 +172,12 @@ export function FinancienClient({ state }: { state: FinanceState }) {
             {transactions.length} transacties · {aggFull.monthCount} maand(en) · gedeeld huishouden
           </div>
         </div>
+        <Link
+          href="/financien/budget"
+          className="ml-auto shrink-0 px-3.5 py-2 rounded-full border border-input-border text-[12.5px] font-semibold text-ink-soft"
+        >
+          Budgetteren
+        </Link>
       </div>
 
       <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-[1080px] w-full mx-auto">

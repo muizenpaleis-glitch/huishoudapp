@@ -107,6 +107,9 @@ export type Settings = {
   categoryBudgets: Record<string, number>;
   personalSavings: number;
   investmentValue: number;
+  categoryInflatie: Record<string, number>;
+  inflatieDefault: number;
+  inkomenGroei: number;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -123,6 +126,9 @@ export const DEFAULT_SETTINGS: Settings = {
   categoryBudgets: {},
   personalSavings: 0,
   investmentValue: 0,
+  categoryInflatie: {},
+  inflatieDefault: 2.5,
+  inkomenGroei: 2.0,
 };
 
 /* ================================================================
@@ -576,4 +582,155 @@ export function catBudgetInfo(
   if (Object.prototype.hasOwnProperty.call(ovr, cat)) return { budget: ovr[cat], basis: "budget", avg };
   if (cat in DEFAULT_CATEGORY_BUDGETS) return { budget: DEFAULT_CATEGORY_BUDGETS[cat], basis: "budget", avg };
   return { budget: avg, basis: "avg", avg };
+}
+
+/* ================================================================
+   7. MULTI-YEAR BUDGET DERIVATION
+   Turns the base-year budgets into a per-year plan: index each line
+   forward with its own inflation rate, unless an explicit override
+   exists for that year. Pure functions — the caller supplies the
+   stored overrides, so nothing here touches the database.
+   ================================================================ */
+
+export type BudgetJaarOverride = { jaar: number; soort: "categorie" | "jaarpost"; naam: string; bedrag: number };
+export type MjpJaarRow = {
+  jaar: number;
+  inkomen: number | null;
+  investeringen: number | null;
+  opResultaat: number | null;
+};
+
+/** Index a base-year amount forward. Years before the base deflate symmetrically. */
+function geindexeerd(basis: number, pct: number, jaar: number): number {
+  return basis * Math.pow(1 + pct / 100, jaar - PROJECTION_START_YEAR);
+}
+
+export function categorieInflatie(cat: string, settings: Settings): number {
+  const per = settings.categoryInflatie || {};
+  return Object.prototype.hasOwnProperty.call(per, cat) ? per[cat] : settings.inflatieDefault;
+}
+
+function findOverride(
+  overrides: BudgetJaarOverride[],
+  jaar: number,
+  soort: "categorie" | "jaarpost",
+  naam: string,
+): number | null {
+  const hit = overrides.find((o) => o.jaar === jaar && o.soort === soort && o.naam === naam);
+  return hit ? hit.bedrag : null;
+}
+
+/** Base-year monthly budget for a category. Deliberately NOT catBudgetInfo():
+ *  that falls back to the historical average, which is negative for income
+ *  categories (recurringSpendByCat subtracts positive amounts) and would drag
+ *  the plan total below zero. Here an unbudgeted category is simply 0 until
+ *  the household gives it a budget. */
+export function categorieBasisBudget(cat: string, settings: Settings): number {
+  const ovr = settings.categoryBudgets || {};
+  if (Object.prototype.hasOwnProperty.call(ovr, cat)) return ovr[cat];
+  if (cat in DEFAULT_CATEGORY_BUDGETS) return DEFAULT_CATEGORY_BUDGETS[cat];
+  return 0;
+}
+
+/** Monthly budget for one bank category in one year, plus where it came from. */
+export function categorieBudgetVoorJaar(
+  cat: string,
+  jaar: number,
+  settings: Settings,
+  overrides: BudgetJaarOverride[],
+): { bedrag: number; afgeleid: number; bron: "override" | "afgeleid" } {
+  const afgeleid = geindexeerd(categorieBasisBudget(cat, settings), categorieInflatie(cat, settings), jaar);
+  const ovr = findOverride(overrides, jaar, "categorie", cat);
+  return ovr != null
+    ? { bedrag: ovr, afgeleid, bron: "override" }
+    : { bedrag: afgeleid, afgeleid, bron: "afgeleid" };
+}
+
+/** Categories to show in a budget year: everything with a budget, plus any
+ *  category the household actually spends money in (net positive), so
+ *  unbudgeted spend is visible instead of silently missing. Income categories
+ *  net negative here and are excluded. */
+export function budgetCategorieen(agg: Agg, settings: Settings): string[] {
+  const metBudget = new Set([
+    ...Object.keys(DEFAULT_CATEGORY_BUDGETS),
+    ...Object.keys(settings.categoryBudgets || {}),
+  ]);
+  for (const [cat, bedrag] of Object.entries(agg.recurringSpendByCat)) {
+    if (bedrag > 0) metBudget.add(cat);
+  }
+  return [...metBudget].sort((a, b) => a.localeCompare(b));
+}
+
+/** Total recurring spend for a year, in euros per year. */
+export function vasteLastenVoorJaar(
+  jaar: number,
+  agg: Agg,
+  settings: Settings,
+  overrides: BudgetJaarOverride[],
+): number {
+  return (
+    budgetCategorieen(agg, settings).reduce(
+      (s, c) => s + categorieBudgetVoorJaar(c, jaar, settings, overrides).bedrag,
+      0,
+    ) * 12
+  );
+}
+
+export function jaarpostVoorJaar(
+  post: Yearly & { inflatie?: number | null },
+  jaar: number,
+  settings: Settings,
+  overrides: BudgetJaarOverride[],
+): { bedrag: number; afgeleid: number; bron: "override" | "afgeleid" } {
+  const pct = post.inflatie ?? settings.inflatieDefault;
+  const afgeleid = geindexeerd(post.budget || 0, pct, jaar);
+  const ovr = findOverride(overrides, jaar, "jaarpost", post.name);
+  return ovr != null
+    ? { bedrag: ovr, afgeleid, bron: "override" }
+    : { bedrag: afgeleid, afgeleid, bron: "afgeleid" };
+}
+
+export function jaarpostenVoorJaar(
+  jaar: number,
+  yearly: (Yearly & { inflatie?: number | null })[],
+  settings: Settings,
+  overrides: BudgetJaarOverride[],
+): number {
+  return yearly.reduce((s, y) => s + jaarpostVoorJaar(y, jaar, settings, overrides).bedrag, 0);
+}
+
+export function inkomenVoorJaar(jaar: number, settings: Settings, mjpRows: MjpJaarRow[]): number {
+  const row = mjpRows.find((r) => r.jaar === jaar);
+  if (row && row.inkomen != null) return row.inkomen;
+  return geindexeerd(RECURRING_INCOME_BUDGET, settings.inkomenGroei, jaar);
+}
+
+/** Operational result: income minus recurring spend minus yearly posts.
+ *  `sheet` is the original spreadsheet figure, kept for comparison so the
+ *  gap between the two is visible instead of silently resolved. */
+export function opResultaatVoorJaar(
+  jaar: number,
+  agg: Agg,
+  settings: Settings,
+  yearly: (Yearly & { inflatie?: number | null })[],
+  overrides: BudgetJaarOverride[],
+  mjpRows: MjpJaarRow[],
+): {
+  inkomen: number;
+  vasteLasten: number;
+  jaarposten: number;
+  afgeleid: number;
+  gebruikt: number;
+  sheet: number | null;
+  bron: "override" | "afgeleid";
+} {
+  const inkomen = inkomenVoorJaar(jaar, settings, mjpRows);
+  const vasteLasten = vasteLastenVoorJaar(jaar, agg, settings, overrides);
+  const jaarposten = jaarpostenVoorJaar(jaar, yearly, settings, overrides);
+  const afgeleid = inkomen - vasteLasten - jaarposten;
+  const row = mjpRows.find((r) => r.jaar === jaar);
+  const sheet = OP_RESULT[jaar] ?? null;
+  return row && row.opResultaat != null
+    ? { inkomen, vasteLasten, jaarposten, afgeleid, gebruikt: row.opResultaat, sheet, bron: "override" }
+    : { inkomen, vasteLasten, jaarposten, afgeleid, gebruikt: afgeleid, sheet, bron: "afgeleid" };
 }
