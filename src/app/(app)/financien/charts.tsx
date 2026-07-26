@@ -11,21 +11,23 @@ const INK = "#3A2E25";
 const MUTED = "#9A8B7C";
 const GRID = "#E7DCCE";
 
-/* ── Projection line (plan vs actual vs incl. invested + critical grens) ── */
+/* ── Projection line (plan vs actual + optional critical grens) ──
+   `plan` and `actual` are already composed by the caller from whichever
+   wealth pots are selected, so this component just draws two lines. The
+   €15k kritieke grens only applies to the liquid buffer, so the caller
+   passes null for it whenever the selection isn't the buffer alone. */
 export function ProjectionChart({
   jaren,
   plan,
   actual,
-  total,
   kritiekeGrens,
-  showTotal,
+  actualLabel = "Werkelijk",
 }: {
   jaren: number[];
   plan: number[];
   actual: number[];
-  total: number[];
-  kritiekeGrens: number;
-  showTotal: boolean;
+  kritiekeGrens: number | null;
+  actualLabel?: string;
 }) {
   const W = 640;
   const H = 260;
@@ -33,8 +35,8 @@ export function ProjectionChart({
   const padR = 14;
   const padT = 14;
   const padB = 26;
-  const series = [plan, actual, ...(showTotal ? [total] : [])];
-  const allVals = series.flat().concat([kritiekeGrens, 0]);
+  const series = [plan, actual];
+  const allVals = series.flat().concat(kritiekeGrens != null ? [kritiekeGrens, 0] : [0]);
   const maxV = Math.max(...allVals);
   const minV = Math.min(...allVals);
   const range = maxV - minV || 1;
@@ -65,23 +67,25 @@ export function ProjectionChart({
         <text x={padL + 3} y={y(0) - 3} fontSize={8.5} fill={INK} opacity={0.6}>
           €0
         </text>
-        {/* critical threshold */}
-        <line
-          x1={padL}
-          x2={W - padR}
-          y1={y(kritiekeGrens)}
-          y2={y(kritiekeGrens)}
-          stroke="#BC4A26"
-          strokeWidth={1}
-          strokeDasharray="4 3"
-        />
-        <text x={W - padR} y={y(kritiekeGrens) - 3} fontSize={8.5} fill="#BC4A26" textAnchor="end">
-          kritieke grens
-        </text>
+        {/* critical threshold — buffer-only concept, hidden otherwise */}
+        {kritiekeGrens != null && (
+          <>
+            <line
+              x1={padL}
+              x2={W - padR}
+              y1={y(kritiekeGrens)}
+              y2={y(kritiekeGrens)}
+              stroke="#BC4A26"
+              strokeWidth={1}
+              strokeDasharray="4 3"
+            />
+            <text x={W - padR} y={y(kritiekeGrens) - 3} fontSize={8.5} fill="#BC4A26" textAnchor="end">
+              kritieke grens
+            </text>
+          </>
+        )}
         {/* plan */}
         <path d={path(plan)} fill="none" stroke={MUTED} strokeWidth={1.5} strokeDasharray="5 3" />
-        {/* incl invested */}
-        {showTotal && <path d={path(total)} fill="none" stroke="#6C5B8C" strokeWidth={1.5} />}
         {/* actual */}
         <path d={path(actual)} fill="none" stroke="#C4633B" strokeWidth={2.5} />
         {actual.map((v, i) => (
@@ -115,9 +119,8 @@ export function ProjectionChart({
         )}
       </svg>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] mt-1">
-        <Legend color="#C4633B" label="Werkelijk (buffer)" />
+        <Legend color="#C4633B" label={actualLabel} />
         <Legend color={MUTED} label="Plan (MJP)" dashed />
-        {showTotal && <Legend color="#6C5B8C" label="Incl. belegd vermogen" />}
         {hover !== null && (
           <span className="ml-auto text-muted">
             <b className="text-ink">{jaren[hover]}</b> · werkelijk {fmtEUR0(actual[hover])} · plan{" "}

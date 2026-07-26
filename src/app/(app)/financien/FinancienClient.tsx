@@ -43,7 +43,7 @@ export function FinancienClient({ state }: { state: FinanceState }) {
   const [gran, setGran] = useState<TimeGran>("all");
   const [period, setPeriod] = useState("");
   const [projView, setProjView] = useState<"multi" | "ytd">("multi");
-  const [showInvested, setShowInvested] = useState(false);
+  const [pots, setPots] = useState({ buffer: true, persoonlijk: false, beleggingen: false });
   const [incYear, setIncYear] = useState<"all" | number>("all");
   const [yrYear, setYrYear] = useState<"all" | number>("all");
   const [catMonth, setCatMonth] = useState<string>("latest");
@@ -97,11 +97,48 @@ export function FinancienClient({ state }: { state: FinanceState }) {
     for (let i = 0; i < settings.horizon; i++) arr.push(PROJECTION_START_YEAR + i);
     return arr;
   }, [settings.horizon]);
+  // ── Wealth pots on the projection ──
+  // Each pot gets its own forward series so any combination can be summed:
+  //  · buffer      — the MJP line itself (op result − investeringen − incidentelen)
+  //  · persoonlijk — a manually entered amount, no growth model, so flat
+  //  · beleggingen — current market value plus the planned yearly injections.
+  //    `total − actual` is exactly that cumulative planned injection, so we
+  //    reuse it instead of re-deriving the INVESTMENTS table here.
+  const potSeries = useMemo(() => {
+    const cumInvest = actual.map((a, i) => total[i] - a);
+    return {
+      bufferPlan: plan,
+      bufferActual: actual,
+      persoonlijk: plan.map(() => settings.personalSavings),
+      beleggingen: cumInvest.map((c) => settings.investmentValue + c),
+    };
+  }, [plan, actual, total, settings.personalSavings, settings.investmentValue]);
+
+  const anyPot = pots.buffer || pots.persoonlijk || pots.beleggingen;
+  const sumSeries = (bufferSide: number[]) =>
+    bufferSide.map(
+      (_, i) =>
+        (pots.buffer ? bufferSide[i] : 0) +
+        (pots.persoonlijk ? potSeries.persoonlijk[i] : 0) +
+        (pots.beleggingen ? potSeries.beleggingen[i] : 0),
+    );
+  const selPlan = sumSeries(potSeries.bufferPlan);
+  const selActual = sumSeries(potSeries.bufferActual);
+
   const isYtd = projView === "ytd";
   const chartJaren = isYtd ? jaren.slice(0, 2) : jaren;
-  const chartPlan = isYtd ? plan.slice(0, 2) : plan;
-  const chartActual = isYtd ? actual.slice(0, 2) : actual;
-  const chartTotal = isYtd ? total.slice(0, 2) : total;
+  const chartPlan = isYtd ? selPlan.slice(0, 2) : selPlan;
+  const chartActual = isYtd ? selActual.slice(0, 2) : selActual;
+  // The €15k kritieke grens is defined for the liquid buffer alone; showing it
+  // against a combined total would compare it to a different quantity.
+  const bufferOnly = pots.buffer && !pots.persoonlijk && !pots.beleggingen;
+  const potLabel = [
+    pots.buffer && "gezamenlijk",
+    pots.persoonlijk && "persoonlijk",
+    pots.beleggingen && "beleggingen",
+  ]
+    .filter(Boolean)
+    .join(" + ");
 
   // spend doughnut (filtered)
   const donutData = useMemo(() => {
@@ -215,10 +252,6 @@ export function FinancienClient({ state }: { state: FinanceState }) {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="text-[13px] font-bold tracking-wider uppercase text-label">Meerjarenprojectie (MJP)</div>
             <div className="flex items-center gap-3">
-              <label className="hidden md:flex items-center gap-1.5 text-[12px] text-muted">
-                <input type="checkbox" checked={showInvested} onChange={(e) => setShowInvested(e.target.checked)} />
-                incl. belegd
-              </label>
               <div className="flex bg-track rounded-full p-[3px]">
                 {(["multi", "ytd"] as const).map((v) => (
                   <button
@@ -236,14 +269,50 @@ export function FinancienClient({ state }: { state: FinanceState }) {
               </div>
             </div>
           </div>
-          <ProjectionChart
-            jaren={chartJaren}
-            plan={chartPlan}
-            actual={chartActual}
-            total={chartTotal}
-            kritiekeGrens={15000}
-            showTotal={showInvested && !isYtd}
-          />
+          <div className="flex gap-1.5 flex-wrap items-center">
+            <span className="text-[11.5px] text-muted mr-0.5">Toon:</span>
+            {(
+              [
+                { key: "buffer", label: "Gezamenlijk", kleur: "#C4633B" },
+                { key: "persoonlijk", label: "Persoonlijk", kleur: "#5C7F55" },
+                { key: "beleggingen", label: "Beleggingen", kleur: "#6C5B8C" },
+              ] as const
+            ).map((p) => {
+              const on = pots[p.key];
+              return (
+                <button
+                  key={p.key}
+                  aria-pressed={on}
+                  onClick={() => setPots((s) => ({ ...s, [p.key]: !s[p.key] }))}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-semibold border"
+                  style={{
+                    background: on ? p.kleur : "var(--color-card)",
+                    color: on ? "var(--color-accent-ink)" : "var(--color-muted)",
+                    borderColor: on ? p.kleur : "var(--color-input-border)",
+                  }}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ background: on ? "var(--color-accent-ink)" : p.kleur }}
+                  />
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+          {anyPot ? (
+            <ProjectionChart
+              jaren={chartJaren}
+              plan={chartPlan}
+              actual={chartActual}
+              kritiekeGrens={bufferOnly ? 15000 : null}
+              actualLabel={`Werkelijk · ${potLabel}`}
+            />
+          ) : (
+            <div className="text-[13px] text-muted py-8 text-center">
+              Kies hierboven minimaal één vermogenspot om de projectie te tonen.
+            </div>
+          )}
         </Card>
 
         {/* Spend by category */}
@@ -309,10 +378,8 @@ export function FinancienClient({ state }: { state: FinanceState }) {
           </Collapsible>
         </div>
 
-        {/* ── Web-only: CSV upload, triage, editors, settings, advanced ── */}
+        {/* ── Web-only: triage, editors, settings, CSV upload, advanced ── */}
         <div className="hidden md:flex md:col-span-2 flex-col gap-4">
-          <CsvUpload />
-
           <Collapsible title="Transactie-triage" defaultOpen={false}>
             <TriageTable
               transactions={transactions}
@@ -335,6 +402,8 @@ export function FinancienClient({ state }: { state: FinanceState }) {
           <Collapsible title="Instellingen (projectie, rekeningen &amp; drempels)" defaultOpen={false}>
             <SettingsPanel settings={settings} />
           </Collapsible>
+
+          <CsvUpload />
 
           <AdvancedMenu />
         </div>
