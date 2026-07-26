@@ -482,8 +482,13 @@ function Collapsible({
     setOpen((o) => !o);
     // Opening reveals a potentially very long list (e.g. all transactions);
     // land on the section's own header/filters instead of wherever the
-    // page's scroll position happens to end up once it renders.
-    requestAnimationFrame(() => anchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    // page's scroll position happens to end up once it renders. An animated
+    // ("smooth") scroll fights visibly with the browser still laying out a
+    // large table underneath it, so jump instantly instead — and wait two
+    // frames so that layout has actually settled before measuring position.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => anchorRef.current?.scrollIntoView({ behavior: "instant", block: "start" })),
+    );
   }
 
   return (
