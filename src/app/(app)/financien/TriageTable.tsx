@@ -26,6 +26,8 @@ const CLASSES: { key: ClassName; label: string }[] = [
 
 export function TriageTable({
   transactions,
+  alleTransacties,
+  periodeLabel,
   overrides,
   settings,
   investIbans,
@@ -35,7 +37,12 @@ export function TriageTable({
   catFilter,
   filterJaar,
 }: {
+  /** The rows to triage — already narrowed by the dashboard's period filter. */
   transactions: Tx[];
+  /** Every transaction regardless of period, so the category dropdown keeps
+   *  offering categories that only occur outside the selected period. */
+  alleTransacties: Tx[];
+  periodeLabel?: string;
   overrides: Overrides;
   settings: Settings;
   investIbans: Set<string>;
@@ -102,9 +109,9 @@ export function TriageTable({
       ...Object.keys(DEFAULT_CATEGORY_BUDGETS),
       ...Object.keys(settings.categoryBudgets || {}),
     ]);
-    for (const t of transactions) set.add(effective(t, overrides, settings, investIbans).bankCat);
+    for (const t of alleTransacties) set.add(effective(t, overrides, settings, investIbans).bankCat);
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [transactions, overrides, settings, investIbans]);
+  }, [alleTransacties, overrides, settings, investIbans]);
 
   function save(txId: string, next: Override) {
     const cleaned: Override = {};
@@ -188,7 +195,12 @@ export function TriageTable({
       )}
 
       <div className="text-[12px] text-muted">
-        {rows.length} van {transactions.length} transacties {pending && "· opslaan…"}
+        {rows.length} van {transactions.length} transacties
+        {periodeLabel && <> · periode {periodeLabel}</>}
+        {alleTransacties.length !== transactions.length && (
+          <> · {alleTransacties.length} in totaal</>
+        )}
+        {pending && " · opslaan…"}
       </div>
 
       <div className="overflow-x-auto">

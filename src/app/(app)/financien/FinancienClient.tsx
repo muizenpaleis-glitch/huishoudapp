@@ -240,7 +240,7 @@ export function FinancienClient({
             </select>
           )}
           <span className="text-[11px] text-muted ml-auto hidden md:block">
-            Filtert inkomen, uitgaven en de categorie- &amp; cashflow-weergaven. Projectie en incidenteel gebruiken altijd alle data.
+            Filtert inkomen, uitgaven, de categorie- &amp; cashflow-weergaven en de transactie-triage. Projectie en incidenteel gebruiken altijd alle data.
           </span>
         </Card>
 
@@ -416,7 +416,9 @@ export function FinancienClient({
             scrollOnMount={!!(jaarpost || categorie)}
           >
             <TriageTable
-              transactions={transactions}
+              transactions={filteredTx}
+              alleTransacties={transactions}
+              periodeLabel={gran === "all" ? undefined : period}
               overrides={overrides}
               settings={settings}
               investIbans={investIbans}
