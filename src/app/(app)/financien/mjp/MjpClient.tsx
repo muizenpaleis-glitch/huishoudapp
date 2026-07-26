@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { BackButton, Card } from "@/components/ui";
+import { AlleenDesktop, BackButton, Card } from "@/components/ui";
 import { fmtEUR0, signedEUR } from "@/lib/finance/format";
 import {
   rebuildInvestIbans,
@@ -129,8 +129,12 @@ export function MjpClient({ state }: { state: FinanceState }) {
   const afwijking = actual[actual.length - 1] - plan[plan.length - 1];
 
   return (
-    <div className="pt-16 md:pt-6 px-5 pb-8 overflow-y-auto">
-      <div className="max-w-[1180px] mx-auto flex flex-col gap-4">
+    <AlleenDesktop
+      titel="Meerjarenplan"
+      uitleg="Het meerjarenplan is een tabel met elf kolommen per jaar, van startpositie tot eindpositie. Die is op een telefoon niet te overzien of te bewerken. Open deze pagina op een laptop of desktop."
+    >
+      <div className="pt-16 md:pt-6 px-5 pb-8 overflow-y-auto">
+        <div className="max-w-[1180px] mx-auto flex flex-col gap-4">
         <div className="flex items-center gap-3">
           <BackButton href="/financien" />
           <div className="min-w-0">
@@ -332,8 +336,9 @@ export function MjpClient({ state }: { state: FinanceState }) {
           </div>
           <SettingsPanel settings={settings} />
         </Card>
+        </div>
       </div>
-    </div>
+    </AlleenDesktop>
   );
 }
 

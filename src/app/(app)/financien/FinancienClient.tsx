@@ -183,7 +183,8 @@ export function FinancienClient({
             {transactions.length} transacties · {aggFull.monthCount} maand(en) · gedeeld huishouden
           </div>
         </div>
-        <div className="ml-auto shrink-0 flex gap-2">
+        {/* Beide pagina's zijn brede bewerktabellen — alleen op desktop */}
+        <div className="ml-auto shrink-0 hidden md:flex gap-2">
           <Link
             href="/financien/budget"
             className="px-3.5 py-2 rounded-full border border-input-border text-[12.5px] font-semibold text-ink-soft"

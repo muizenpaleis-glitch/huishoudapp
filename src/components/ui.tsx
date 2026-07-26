@@ -54,6 +54,44 @@ export function BackButton({ href }: { href: string }) {
   );
 }
 
+/** Wraps a page that only makes sense on a wide screen. Budgetteren and het
+ *  Meerjarenplan zijn brede bewerktabellen; op een telefoon zijn ze niet te
+ *  bedienen. Zelfde aanpak als de bewerk-blokken op Financiën: puur op
+ *  schermbreedte, geen user-agent-gedoe. */
+export function AlleenDesktop({
+  titel,
+  uitleg,
+  terug = "/financien",
+  children,
+}: {
+  titel: string;
+  uitleg: string;
+  terug?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <div className="hidden md:block">{children}</div>
+      <div className="md:hidden pt-16 px-5 pb-8 flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <BackButton href={terug} />
+          <div className="text-[21px] font-bold tracking-tight">{titel}</div>
+        </div>
+        <Card className="p-5 flex flex-col gap-3">
+          <div className="text-[15px] font-semibold">Alleen op een groot scherm</div>
+          <p className="text-[13.5px] text-muted leading-relaxed">{uitleg}</p>
+          <Link
+            href={terug}
+            className="self-start mt-1 px-4 py-2.5 rounded-full bg-ink text-accent-ink text-[13.5px] font-semibold"
+          >
+            Terug naar Financiën
+          </Link>
+        </Card>
+      </div>
+    </>
+  );
+}
+
 export function Pill({
   active,
   children,

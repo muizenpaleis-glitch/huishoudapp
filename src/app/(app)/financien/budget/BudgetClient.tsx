@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { BackButton, Card } from "@/components/ui";
+import { AlleenDesktop, BackButton, Card } from "@/components/ui";
 import { fmtEUR0, signedEUR } from "@/lib/finance/format";
 import {
   rebuildInvestIbans,
@@ -89,8 +89,12 @@ export function BudgetClient({ state, jaarParam }: { state: FinanceState; jaarPa
     !(c in DEFAULT_CATEGORY_BUDGETS) && !(agg.recurringSpendByCat[c] > 0);
 
   return (
-    <div className="pt-16 md:pt-6 px-5 pb-8 overflow-y-auto">
-      <div className="max-w-[980px] mx-auto flex flex-col gap-4">
+    <AlleenDesktop
+      titel="Budgetteren"
+      uitleg="Budgetteren is een brede tabel met een regel per categorie en per jaarpost, naast de werkelijke uitgaven. Dat is op een telefoonscherm niet te bedienen. Open deze pagina op een laptop of desktop."
+    >
+      <div className="pt-16 md:pt-6 px-5 pb-8 overflow-y-auto">
+        <div className="max-w-[980px] mx-auto flex flex-col gap-4">
         <div className="flex items-center gap-3">
           <BackButton href="/financien" />
           <div>
@@ -439,8 +443,9 @@ export function BudgetClient({ state, jaarParam }: { state: FinanceState; jaarPa
             ))
           )}
         </Card>
+        </div>
       </div>
-    </div>
+    </AlleenDesktop>
   );
 }
 
