@@ -31,6 +31,8 @@ export function TriageTable({
   investIbans,
   projects,
   yearly,
+  postFilter,
+  postFilterJaar,
 }: {
   transactions: Tx[];
   overrides: Overrides;
@@ -38,9 +40,12 @@ export function TriageTable({
   investIbans: Set<string>;
   projects: Project[];
   yearly: Yearly[];
+  postFilter?: string;
+  postFilterJaar?: number;
 }) {
   const [pending, startTransition] = useTransition();
-  const [filter, setFilter] = useState<"all" | ClassName>("all");
+  const [filter, setFilter] = useState<"all" | ClassName>(postFilter ? "yearly" : "all");
+  const [post, setPost] = useState<string | null>(postFilter ?? null);
   const [search, setSearch] = useState("");
   type SortKey = "datum" | "omschrijving" | "bedrag" | null;
   const [sortKey, setSortKey] = useState<SortKey>(null);
@@ -58,6 +63,13 @@ export function TriageTable({
   const rows = useMemo(() => {
     let list = transactions.map((t) => ({ t, e: effective(t, overrides, settings, investIbans) }));
     if (filter !== "all") list = list.filter((r) => r.e.cls === filter);
+    if (post) {
+      list = list.filter(
+        (r) =>
+          r.e.project === post &&
+          (postFilterJaar == null || parseInt(r.t.date.slice(0, 4), 10) === postFilterJaar),
+      );
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -77,13 +89,16 @@ export function TriageTable({
       });
     }
     return list;
-  }, [transactions, overrides, settings, investIbans, filter, search, sortKey, sortDir]);
+  }, [transactions, overrides, settings, investIbans, filter, post, postFilterJaar, search, sortKey, sortDir]);
 
   // Alle categorieën voor de dropdown: de vaste Jaarbegroting-lijst plus
   // elke categorie die al ergens in de data voorkomt (bijv. via een eerdere
   // handmatige aanpassing), zodat niets ontbreekt.
   const alleCategorieen = useMemo(() => {
-    const set = new Set<string>(Object.keys(DEFAULT_CATEGORY_BUDGETS));
+    const set = new Set<string>([
+      ...Object.keys(DEFAULT_CATEGORY_BUDGETS),
+      ...Object.keys(settings.categoryBudgets || {}),
+    ]);
     for (const t of transactions) set.add(effective(t, overrides, settings, investIbans).bankCat);
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [transactions, overrides, settings, investIbans]);
@@ -148,6 +163,20 @@ export function TriageTable({
           className="px-3 py-1.5 rounded-full border border-input-border bg-card text-[12.5px] outline-none ml-auto"
         />
       </div>
+
+      {post && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[12px] text-muted">Gefilterd op jaarpost:</span>
+          <button
+            onClick={() => setPost(null)}
+            className="px-3 py-1.5 rounded-full text-[12px] font-semibold border border-accent text-accent"
+            title="Filter opheffen"
+          >
+            {post}
+            {postFilterJaar ? ` · ${postFilterJaar}` : ""} ✕
+          </button>
+        </div>
+      )}
 
       <div className="text-[12px] text-muted">
         {rows.length} van {transactions.length} transacties {pending && "· opslaan…"}

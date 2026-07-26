@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Card } from "@/components/ui";
@@ -37,8 +37,17 @@ import {
   saveOverride,
 } from "./actions";
 
-export function FinancienClient({ state }: { state: FinanceState }) {
-  const { transactions, overrides, settings, projects, yearly, budgetJaar, mjpJaar } = state;
+export function FinancienClient({
+  state,
+  jaarpost,
+  jaarpostJaar,
+}: {
+  state: FinanceState;
+  jaarpost?: string;
+  jaarpostJaar?: string;
+}) {
+  const { transactions, overrides, settings, projects, yearly, budgetJaar, mjpJaar, inkomsten } =
+    state;
 
   // UI-only (per-device) state
   const [gran, setGran] = useState<TimeGran>("all");
@@ -67,8 +76,8 @@ export function FinancienClient({ state }: { state: FinanceState }) {
     [filteredTx, overrides, settings, investIbans],
   );
   const { plan, actual, total } = useMemo(
-    () => projectSeries(aggFull, settings, projects, yearly, budgetJaar, mjpJaar),
-    [aggFull, settings, projects, yearly, budgetJaar, mjpJaar],
+    () => projectSeries(aggFull, settings, projects, yearly, budgetJaar, mjpJaar, inkomsten),
+    [aggFull, settings, projects, yearly, budgetJaar, mjpJaar, inkomsten],
   );
 
   const buffer = computeBufferActual(aggFull, settings);
@@ -395,7 +404,14 @@ export function FinancienClient({ state }: { state: FinanceState }) {
 
         {/* ── Web-only: triage, editors, settings, CSV upload, advanced ── */}
         <div className="hidden md:flex md:col-span-2 flex-col gap-4">
-          <Collapsible title="Transactie-triage" defaultOpen={false}>
+          {/* Arriving from a "werkelijk" amount on Budgetteren: open the triage
+              already narrowed to that yearly post, so the click lands on the
+              transactions the figure is made of instead of the whole list. */}
+          <Collapsible
+            title="Transactie-triage"
+            defaultOpen={!!jaarpost}
+            scrollOnMount={!!jaarpost}
+          >
             <TriageTable
               transactions={transactions}
               overrides={overrides}
@@ -403,6 +419,8 @@ export function FinancienClient({ state }: { state: FinanceState }) {
               investIbans={investIbans}
               projects={projects}
               yearly={yearly}
+              postFilter={jaarpost}
+              postFilterJaar={jaarpostJaar ? parseInt(jaarpostJaar, 10) : undefined}
             />
           </Collapsible>
 
@@ -447,6 +465,7 @@ export function FinancienClient({ state }: { state: FinanceState }) {
         yearly={yearly}
         budgetJaar={budgetJaar}
         mjpJaar={mjpJaar}
+        inkomsten={inkomsten}
         investDetected={investDetected}
       />
     </div>
@@ -601,14 +620,24 @@ function ProgressRow({
 function Collapsible({
   title,
   defaultOpen,
+  scrollOnMount,
   children,
 }: {
   title: string;
   defaultOpen?: boolean;
+  scrollOnMount?: boolean;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(!!defaultOpen);
   const anchorRef = useRef<HTMLDivElement>(null);
+
+  // Deep-linked open: jump to the section once, after layout has settled.
+  useEffect(() => {
+    if (!scrollOnMount) return;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => anchorRef.current?.scrollIntoView({ behavior: "instant", block: "start" })),
+    );
+  }, [scrollOnMount]);
 
   function toggle() {
     setOpen((o) => !o);

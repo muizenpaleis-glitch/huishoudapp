@@ -40,7 +40,8 @@ type Rij = {
 };
 
 export function MjpClient({ state }: { state: FinanceState }) {
-  const { transactions, overrides, settings, projects, yearly, budgetJaar, mjpJaar } = state;
+  const { transactions, overrides, settings, projects, yearly, budgetJaar, mjpJaar, inkomsten } =
+    state;
   const [, start] = useTransition();
   const [pots, setPots] = useState({ buffer: true, persoonlijk: false, beleggingen: false });
 
@@ -54,8 +55,8 @@ export function MjpClient({ state }: { state: FinanceState }) {
   );
 
   const { plan, actual, total } = useMemo(
-    () => projectSeries(agg, settings, projects, yearly, budgetJaar, mjpJaar),
-    [agg, settings, projects, yearly, budgetJaar, mjpJaar],
+    () => projectSeries(agg, settings, projects, yearly, budgetJaar, mjpJaar, inkomsten),
+    [agg, settings, projects, yearly, budgetJaar, mjpJaar, inkomsten],
   );
 
   // One row per projected year. The start/end positions come straight out of
@@ -69,7 +70,7 @@ export function MjpClient({ state }: { state: FinanceState }) {
     const offset = settings.startNetWorth - PLAN_START_NET_WORTH;
     return Array.from({ length: settings.horizon }, (_, i) => {
       const jaar = PROJECTION_START_YEAR + i;
-      const op = opResultaatVoorJaar(jaar, agg, settings, yearly, budgetJaar, mjpJaar);
+      const op = opResultaatVoorJaar(jaar, agg, settings, yearly, budgetJaar, mjpJaar, inkomsten);
       const inv = mjpJaar.find((m) => m.jaar === jaar)?.investeringen;
       return {
         jaar,
@@ -89,7 +90,7 @@ export function MjpClient({ state }: { state: FinanceState }) {
         eindWerkelijk: actual[i + 1],
       };
     });
-  }, [plan, actual, agg, settings, yearly, budgetJaar, mjpJaar, projects]);
+  }, [plan, actual, agg, settings, yearly, budgetJaar, mjpJaar, projects, inkomsten]);
 
   const toonRendement = settings.returnRate !== 0;
 
@@ -238,7 +239,7 @@ export function MjpClient({ state }: { state: FinanceState }) {
                     <td className="py-1.5 pr-3 text-right">
                       <Bedrag
                         waarde={mjpJaar.find((m) => m.jaar === r.jaar)?.inkomen ?? null}
-                        afgeleid={inkomenVoorJaar(r.jaar, settings, [])}
+                        afgeleid={inkomenVoorJaar(r.jaar, settings, [], inkomsten, budgetJaar)}
                         step={500}
                         onCommit={(v) => start(() => updateMjpJaar(r.jaar, { inkomen: v }))}
                       />

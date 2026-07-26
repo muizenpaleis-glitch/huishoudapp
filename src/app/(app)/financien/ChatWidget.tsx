@@ -14,6 +14,7 @@ import {
   type Project,
   type Yearly,
   type BudgetJaarOverride,
+  type InkomenPost,
   type MjpJaarRow,
 } from "@/lib/finance/engine";
 
@@ -47,6 +48,7 @@ export function ChatWidget({
   yearly,
   budgetJaar,
   mjpJaar,
+  inkomsten,
   investDetected,
 }: {
   agg: Agg;
@@ -58,6 +60,7 @@ export function ChatWidget({
   yearly: (Yearly & { inflatie?: number | null })[];
   budgetJaar: BudgetJaarOverride[];
   mjpJaar: MjpJaarRow[];
+  inkomsten: InkomenPost[];
   investDetected: { iban: string; term: string }[];
 }) {
   const [open, setOpen] = useState(false);
@@ -136,7 +139,7 @@ export function ChatWidget({
       );
     }
     if (has("schema", "track", "vermogen", "net worth", "projectie", "buffer", "grens", "kritiek")) {
-      const { plan, actual } = projectSeries(agg, settings, projects, yearly, budgetJaar, mjpJaar);
+      const { plan, actual } = projectSeries(agg, settings, projects, yearly, budgetJaar, mjpJaar, inkomsten);
       const endYear = PROJECTION_START_YEAR + settings.horizon;
       const diff = actual[actual.length - 1] - plan[plan.length - 1];
       let firstBelow = -1;
@@ -214,7 +217,7 @@ export function ChatWidget({
       );
     }
 
-    const { actual } = projectSeries(agg, settings, projects, yearly, budgetJaar, mjpJaar);
+    const { actual } = projectSeries(agg, settings, projects, yearly, budgetJaar, mjpJaar, inkomsten);
     return (
       `Het beeld over ${period}: terugkerend inkomen ${fmtEUR0(agg.recurringIncome)} versus uitgaven ${fmtEUR0(agg.recurringSpend)} ` +
       `→ bruto waarde ${signedEUR(agg.recurringIncome - agg.recurringSpend)}. Jaarposten ${fmtEUR0(agg.yearlyTotal)}, incidenteel ${fmtEUR0(agg.incidentalTotal)}, netto gespaard ${signedEUR(agg.savings.net)}. ` +

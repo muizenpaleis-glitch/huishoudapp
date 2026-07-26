@@ -1,9 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import type { Tx, Overrides, Settings, Project, Yearly, BudgetJaarOverride, MjpJaarRow } from "./engine";
+import type {
+  Tx, Overrides, Settings, Project, Yearly, BudgetJaarOverride, MjpJaarRow, InkomenPost, BudgetSoort,
+} from "./engine";
 import { DEFAULT_SETTINGS } from "./engine";
 
 export type ProjectRow = Project & { id: string };
 export type YearlyRow = Yearly & { id: string; inflatie: number | null };
+export type InkomenRow = InkomenPost & { id: string };
 
 export type FinanceState = {
   transactions: Tx[];
@@ -13,12 +16,13 @@ export type FinanceState = {
   yearly: YearlyRow[];
   budgetJaar: BudgetJaarOverride[];
   mjpJaar: MjpJaarRow[];
+  inkomsten: InkomenRow[];
 };
 
 // Reads the full raw finance state from the database and normalises Decimals
 // to numbers, so the client-side engine can recompute everything live.
 export async function loadFinance(): Promise<FinanceState> {
-  const [txRows, ovrRows, settingsRow, projectRows, yearlyRows, budgetJaarRows, mjpJaarRows] =
+  const [txRows, ovrRows, settingsRow, projectRows, yearlyRows, budgetJaarRows, mjpJaarRows, inkomenRows] =
     await Promise.all([
       prisma.financeTx.findMany({ orderBy: { date: "desc" } }),
       prisma.financeOverride.findMany(),
@@ -27,6 +31,7 @@ export async function loadFinance(): Promise<FinanceState> {
       prisma.financeYearly.findMany({ orderBy: { volgorde: "asc" } }),
       prisma.financeBudgetJaar.findMany(),
       prisma.financeMjpJaar.findMany({ orderBy: { jaar: "asc" } }),
+      prisma.financeInkomen.findMany({ orderBy: { volgorde: "asc" } }),
     ]);
 
   const transactions: Tx[] = txRows.map((t) => ({
@@ -89,7 +94,7 @@ export async function loadFinance(): Promise<FinanceState> {
   }));
   const budgetJaar: BudgetJaarOverride[] = budgetJaarRows.map((b) => ({
     jaar: b.jaar,
-    soort: b.soort as "categorie" | "jaarpost",
+    soort: b.soort as BudgetSoort,
     naam: b.naam,
     bedrag: Number(b.bedrag),
   }));
@@ -101,5 +106,12 @@ export async function loadFinance(): Promise<FinanceState> {
     notitie: m.notitie,
   }));
 
-  return { transactions, overrides, settings, projects, yearly, budgetJaar, mjpJaar };
+  const inkomsten: InkomenRow[] = inkomenRows.map((i) => ({
+    id: i.id,
+    name: i.naam,
+    budget: Number(i.bedrag),
+    groei: i.groei == null ? null : Number(i.groei),
+  }));
+
+  return { transactions, overrides, settings, projects, yearly, budgetJaar, mjpJaar, inkomsten };
 }

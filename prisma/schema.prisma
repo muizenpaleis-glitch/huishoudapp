@@ -253,6 +253,17 @@ model FinanceYearly {
   inflatie Decimal? @db.Decimal(6, 3) // null = inflatieDefault
 }
 
+// Income broken down per source (salaris, vakantiegeld, 13e maand per persoon)
+// instead of one lump sum. While every row is still 0 the engine falls back to
+// the old aggregate figure, so an unfilled table never zeroes out the plan.
+model FinanceInkomen {
+  id       String   @id @default(cuid())
+  naam     String
+  bedrag   Decimal  @db.Decimal(12, 2) @default(0) // €/jaar in het basisjaar
+  volgorde Int      @default(0)
+  groei    Decimal? @db.Decimal(6, 3) // null = inkomenGroei
+}
+
 // Explicit per-year budget overrides. A row here beats the indexed value
 // derived from the base-year budget; deleting the row restores the derivation
 // (so "leeg = afgeleid" holds, mirroring how setCategoryBudget already works).

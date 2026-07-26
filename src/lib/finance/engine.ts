@@ -505,6 +505,7 @@ export function projectSeries(
   yearly: (Yearly & { inflatie?: number | null })[],
   budgetJaar: BudgetJaarOverride[] = [],
   mjpRows: MjpJaarRow[] = [],
+  inkomsten: InkomenPost[] = [],
 ) {
   const offset = settings.startNetWorth - PLAN_START_NET_WORTH;
   const r = settings.returnRate / 100;
@@ -533,7 +534,8 @@ export function projectSeries(
     // the fixed OP_RESULT table, so the plan reflects what was actually
     // budgeted. The old table survives inside opResultaatVoorJaar as the
     // `sheet` comparison figure.
-    const opResultaat = opResultaatVoorJaar(year, agg, settings, yearly, budgetJaar, mjpRows).gebruikt;
+    const opResultaat = opResultaatVoorJaar(year, agg, settings, yearly, budgetJaar, mjpRows, inkomsten)
+      .gebruikt;
     const investering = investeringVoorJaar(year, settings, mjpRows);
     planNw =
       planNw * (1 + r) +
@@ -545,7 +547,7 @@ export function projectSeries(
     const deviation = agg.deviationByYear[year] || 0;
     const monthsLoaded = (agg.monthsByYear[year] && agg.monthsByYear[year].size) || 0;
     const yearlyDeviation = monthsLoaded
-      ? jaarpostenVoorJaar(year, yearly, settings, budgetJaar) * (monthsLoaded / 12) -
+      ? jaarpostenVoorJaar(year, yearly, settings, budgetJaar, agg) * (monthsLoaded / 12) -
         (agg.yearlyByYear[year] || 0)
       : 0;
     cumDelta +=
@@ -613,7 +615,8 @@ export function catBudgetInfo(
    stored overrides, so nothing here touches the database.
    ================================================================ */
 
-export type BudgetJaarOverride = { jaar: number; soort: "categorie" | "jaarpost"; naam: string; bedrag: number };
+export type BudgetSoort = "categorie" | "jaarpost" | "inkomen";
+export type BudgetJaarOverride = { jaar: number; soort: BudgetSoort; naam: string; bedrag: number };
 export type MjpJaarRow = {
   jaar: number;
   inkomen: number | null;
@@ -635,7 +638,7 @@ export function categorieInflatie(cat: string, settings: Settings): number {
 function findOverride(
   overrides: BudgetJaarOverride[],
   jaar: number,
-  soort: "categorie" | "jaarpost",
+  soort: BudgetSoort,
   naam: string,
 ): number | null {
   const hit = overrides.find((o) => o.jaar === jaar && o.soort === soort && o.naam === naam);
@@ -746,18 +749,53 @@ export function vasteLastenVoorJaar(
   );
 }
 
+/** What a yearly post actually cost in a calendar year, and how much of that
+ *  year was imported. Unlike a monthly category this is a running total, not
+ *  an average: eleven months of data is still an incomplete year. */
+export function werkelijkJaarpostVoorJaar(
+  post: Yearly,
+  jaar: number,
+  agg: Agg,
+): { bedrag: number; maanden: number; volledig: boolean } | null {
+  const maanden = maandenInJaar(jaar, agg);
+  if (maanden === 0) return null;
+  return {
+    bedrag: agg.yearlyByItemYear[post.name + "|" + jaar] || 0,
+    maanden,
+    volledig: maanden >= 12,
+  };
+}
+
 export function jaarpostVoorJaar(
   post: Yearly & { inflatie?: number | null },
   jaar: number,
   settings: Settings,
   overrides: BudgetJaarOverride[],
-): { bedrag: number; afgeleid: number; bron: "override" | "afgeleid" } {
+  agg?: Agg,
+): {
+  bedrag: number;
+  afgeleid: number;
+  bron: "override" | "afgeleid";
+  referentie: { bedrag: number; bron: "werkelijk" | "budget"; jaar: number; maanden: number };
+} {
   const pct = post.inflatie ?? settings.inflatieDefault;
-  const afgeleid = geindexeerd(post.budget || 0, pct, jaar);
+  // A yearly post only indexes off its actual once the previous year is fully
+  // imported. A part-year figure is a part payment, not a year's cost — a post
+  // paid every November would otherwise index off €0 and vanish from the plan.
+  const vorig = jaar - 1;
+  const w = agg && jaar > PROJECTION_START_YEAR ? werkelijkJaarpostVoorJaar(post, vorig, agg) : null;
+  const referentie =
+    w && w.volledig
+      ? { bedrag: w.bedrag, bron: "werkelijk" as const, jaar: vorig, maanden: w.maanden }
+      : { bedrag: post.budget || 0, bron: "budget" as const, jaar: PROJECTION_START_YEAR, maanden: 0 };
+  const afgeleid =
+    referentie.bron === "werkelijk"
+      ? referentie.bedrag * (1 + pct / 100)
+      : geindexeerd(post.budget || 0, pct, jaar);
   const ovr = findOverride(overrides, jaar, "jaarpost", post.name);
   return ovr != null
-    ? { bedrag: ovr, afgeleid, bron: "override" }
-    : { bedrag: afgeleid, afgeleid, bron: "afgeleid" };
+    ? { bedrag: ovr, afgeleid, bron: "override", referentie }
+    : { bedrag: afgeleid, afgeleid, bron: "afgeleid", referentie };
 }
 
 export function jaarpostenVoorJaar(
@@ -765,13 +803,54 @@ export function jaarpostenVoorJaar(
   yearly: (Yearly & { inflatie?: number | null })[],
   settings: Settings,
   overrides: BudgetJaarOverride[],
+  agg?: Agg,
 ): number {
-  return yearly.reduce((s, y) => s + jaarpostVoorJaar(y, jaar, settings, overrides).bedrag, 0);
+  return yearly.reduce((s, y) => s + jaarpostVoorJaar(y, jaar, settings, overrides, agg).bedrag, 0);
 }
 
-export function inkomenVoorJaar(jaar: number, settings: Settings, mjpRows: MjpJaarRow[]): number {
+export type InkomenPost = { name: string; budget: number; groei: number | null };
+
+/** One income source in one year. Same three-step resolution as everything
+ *  else: per-year override → base amount indexed with its own growth rate. */
+export function inkomenpostVoorJaar(
+  post: InkomenPost,
+  jaar: number,
+  settings: Settings,
+  overrides: BudgetJaarOverride[],
+): { bedrag: number; afgeleid: number; bron: "override" | "afgeleid" } {
+  const pct = post.groei ?? settings.inkomenGroei;
+  const afgeleid = geindexeerd(post.budget || 0, pct, jaar);
+  const ovr = findOverride(overrides, jaar, "inkomen", post.name);
+  return ovr != null
+    ? { bedrag: ovr, afgeleid, bron: "override" }
+    : { bedrag: afgeleid, afgeleid, bron: "afgeleid" };
+}
+
+/** True once the household has actually split its income across the sources.
+ *  Until then every row is 0 and summing them would wipe out the plan, so the
+ *  old aggregate figure keeps applying. */
+export function inkomenIsUitgesplitst(
+  inkomsten: InkomenPost[],
+  overrides: BudgetJaarOverride[] = [],
+): boolean {
+  return (
+    inkomsten.some((i) => (i.budget || 0) !== 0) ||
+    overrides.some((o) => o.soort === "inkomen" && o.bedrag !== 0)
+  );
+}
+
+export function inkomenVoorJaar(
+  jaar: number,
+  settings: Settings,
+  mjpRows: MjpJaarRow[],
+  inkomsten: InkomenPost[] = [],
+  overrides: BudgetJaarOverride[] = [],
+): number {
   const row = mjpRows.find((r) => r.jaar === jaar);
   if (row && row.inkomen != null) return row.inkomen;
+  if (inkomenIsUitgesplitst(inkomsten, overrides)) {
+    return inkomsten.reduce((s, p) => s + inkomenpostVoorJaar(p, jaar, settings, overrides).bedrag, 0);
+  }
   return geindexeerd(RECURRING_INCOME_BUDGET, settings.inkomenGroei, jaar);
 }
 
@@ -807,6 +886,7 @@ export function opResultaatVoorJaar(
   yearly: (Yearly & { inflatie?: number | null })[],
   overrides: BudgetJaarOverride[],
   mjpRows: MjpJaarRow[],
+  inkomsten: InkomenPost[] = [],
 ): {
   inkomen: number;
   vasteLasten: number;
@@ -816,9 +896,9 @@ export function opResultaatVoorJaar(
   sheet: number | null;
   bron: "override" | "afgeleid";
 } {
-  const inkomen = inkomenVoorJaar(jaar, settings, mjpRows);
+  const inkomen = inkomenVoorJaar(jaar, settings, mjpRows, inkomsten, overrides);
   const vasteLasten = vasteLastenVoorJaar(jaar, agg, settings, overrides);
-  const jaarposten = jaarpostenVoorJaar(jaar, yearly, settings, overrides);
+  const jaarposten = jaarpostenVoorJaar(jaar, yearly, settings, overrides, agg);
   const afgeleid = inkomen - vasteLasten - jaarposten;
   const row = mjpRows.find((r) => r.jaar === jaar);
   const sheet = OP_RESULT[jaar] ?? null;

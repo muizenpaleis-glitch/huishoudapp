@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { parseAsnCsv } from "@/lib/finance/asn";
 import { seedFinance } from "@/lib/finance/seed";
-import type { Override } from "@/lib/finance/engine";
+import type { Override, BudgetSoort } from "@/lib/finance/engine";
 
 function refresh() {
   // "layout" makes this cover the sub-routes too (/financien/budget, /mjp).
@@ -114,7 +114,7 @@ export async function setCategoryBudget(cat: string, value: number | null) {
 // again — "leeg = afgeleid", same contract as setCategoryBudget above.
 export async function setBudgetJaar(
   jaar: number,
-  soort: "categorie" | "jaarpost",
+  soort: BudgetSoort,
   naam: string,
   bedrag: number | null,
 ) {
@@ -166,6 +166,24 @@ export async function updateMjpJaar(
   if (row.inkomen == null && row.investeringen == null && row.opResultaat == null && !row.notitie) {
     await prisma.financeMjpJaar.delete({ where: { jaar } });
   }
+  refresh();
+}
+
+// ── Inkomsten per bron (web only) ──────────────────────────────────────
+export async function updateInkomen(
+  id: string,
+  patch: Partial<{ naam: string; bedrag: number; groei: number | null }>,
+) {
+  await prisma.financeInkomen.update({ where: { id }, data: patch });
+  refresh();
+}
+export async function addInkomen() {
+  const count = await prisma.financeInkomen.count();
+  await prisma.financeInkomen.create({ data: { naam: "Nieuwe inkomstenbron", bedrag: 0, volgorde: count } });
+  refresh();
+}
+export async function deleteInkomen(id: string) {
+  await prisma.financeInkomen.delete({ where: { id } });
   refresh();
 }
 
