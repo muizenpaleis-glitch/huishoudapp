@@ -476,17 +476,29 @@ function Collapsible({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(!!defaultOpen);
+  const anchorRef = useRef<HTMLDivElement>(null);
+
+  function toggle() {
+    setOpen((o) => !o);
+    // Opening reveals a potentially very long list (e.g. all transactions);
+    // land on the section's own header/filters instead of wherever the
+    // page's scroll position happens to end up once it renders.
+    requestAnimationFrame(() => anchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
   return (
-    <Card className="p-4.5 flex flex-col gap-3">
-      <button onClick={() => setOpen((o) => !o)} className="flex items-center justify-between">
-        <span
-          className="text-[13px] font-bold tracking-wider uppercase text-label"
-          dangerouslySetInnerHTML={{ __html: title }}
-        />
-        <span className="text-muted text-[12px]">{open ? "▲" : "▼"}</span>
-      </button>
-      {open && children}
-    </Card>
+    <div ref={anchorRef}>
+      <Card className="p-4.5 flex flex-col gap-3">
+        <button onClick={toggle} className="flex items-center justify-between w-full">
+          <span
+            className="text-[13px] font-bold tracking-wider uppercase text-label"
+            dangerouslySetInnerHTML={{ __html: title }}
+          />
+          <span className="text-muted text-[12px]">{open ? "▲" : "▼"}</span>
+        </button>
+        {open && children}
+      </Card>
+    </div>
   );
 }
 
