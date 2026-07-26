@@ -1045,6 +1045,47 @@ function SavingsSection({
             ))}
           </div>
         )}
+
+        {/* investment bookings with exclude toggle (web) — check here first if
+            "waarvan belegd" looks too high: a wrongly-detected transfer (e.g.
+            a joint or child account picked up as a broker IBAN) inflates this
+            total and the multi-year projection along with it. */}
+        {inv.items.length > 0 && (
+          <div className="hidden md:flex flex-col gap-1.5">
+            <div className="text-[11.5px] uppercase tracking-wider text-muted">
+              Investeringsboekingen — wissel uit als dit geen belegging is
+            </div>
+            {inv.items.map((it) => (
+              <div
+                key={it.id}
+                className="flex items-center gap-2 text-[12px] bg-cream rounded-lg px-2 py-1.5"
+                style={{ opacity: it.excluded ? 0.55 : 1 }}
+              >
+                <span className="w-14 text-muted">{it.date.slice(5)}</span>
+                <span
+                  className="w-20 text-right font-medium"
+                  style={{ color: "#6C5B8C", textDecoration: it.excluded ? "line-through" : undefined }}
+                >
+                  {fmtEUR0(Math.abs(it.amount))}
+                </span>
+                <span className="flex-1 truncate text-ink-soft" title={it.desc}>
+                  {it.desc || "—"}
+                </span>
+                <button
+                  onClick={() => start(() => saveOverride(it.id, { notInvestment: !it.excluded }))}
+                  className="text-[10.5px] font-semibold px-2 py-0.5 rounded border shrink-0"
+                  style={{
+                    background: it.excluded ? "var(--color-card)" : "#EDE7F3",
+                    borderColor: it.excluded ? "var(--color-input-border)" : "#D6C9E8",
+                    color: it.excluded ? "var(--color-muted)" : "#6C5B8C",
+                  }}
+                >
+                  {it.excluded ? "uitgesloten" : "belegging"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {investDetected.length > 0 && (
           <div className="text-[11px] text-muted">
             Herkende beleggingsrekening(en): {investDetected.map((d) => `${d.iban} (${d.term})`).join(" · ")}
