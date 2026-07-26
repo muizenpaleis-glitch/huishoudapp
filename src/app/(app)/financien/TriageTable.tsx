@@ -42,7 +42,18 @@ export function TriageTable({
   const [pending, startTransition] = useTransition();
   const [filter, setFilter] = useState<"all" | ClassName>("all");
   const [search, setSearch] = useState("");
-  const [sortAmount, setSortAmount] = useState(false);
+  type SortKey = "datum" | "omschrijving" | "bedrag" | null;
+  const [sortKey, setSortKey] = useState<SortKey>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  function onSort(key: Exclude<SortKey, null>) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "omschrijving" ? "asc" : "desc");
+    }
+  }
 
   const rows = useMemo(() => {
     let list = transactions.map((t) => ({ t, e: effective(t, overrides, settings, investIbans) }));
@@ -53,9 +64,20 @@ export function TriageTable({
         (r) => (r.t.name + " " + r.t.desc + " " + r.e.bankCat).toLowerCase().includes(q),
       );
     }
-    if (sortAmount) list = [...list].sort((a, b) => a.t.amount - b.t.amount);
+    if (sortKey) {
+      const dir = sortDir === "asc" ? 1 : -1;
+      list = [...list].sort((a, b) => {
+        if (sortKey === "bedrag") return (a.t.amount - b.t.amount) * dir;
+        if (sortKey === "omschrijving") {
+          const an = (a.t.name || a.t.desc).toLowerCase();
+          const bn = (b.t.name || b.t.desc).toLowerCase();
+          return an.localeCompare(bn) * dir;
+        }
+        return (a.t.date < b.t.date ? -1 : a.t.date > b.t.date ? 1 : 0) * dir;
+      });
+    }
     return list;
-  }, [transactions, overrides, settings, investIbans, filter, search, sortAmount]);
+  }, [transactions, overrides, settings, investIbans, filter, search, sortKey, sortDir]);
 
   // Alle categorieën voor de dropdown: de vaste Jaarbegroting-lijst plus
   // elke categorie die al ergens in de data voorkomt (bijv. via een eerdere
@@ -125,12 +147,6 @@ export function TriageTable({
           placeholder="Zoek…"
           className="px-3 py-1.5 rounded-full border border-input-border bg-card text-[12.5px] outline-none ml-auto"
         />
-        <button
-          onClick={() => setSortAmount((v) => !v)}
-          className="px-3 py-1.5 rounded-full border border-input-border text-[12px] font-semibold text-ink-soft"
-        >
-          {sortAmount ? "Op bedrag" : "Op datum"}
-        </button>
       </div>
 
       <div className="text-[12px] text-muted">
@@ -141,10 +157,10 @@ export function TriageTable({
         <table className="w-full text-[12.5px] border-collapse min-w-[720px]">
           <thead>
             <tr className="text-left text-label border-b border-divider">
-              <th className="py-2 pr-3 font-semibold">Datum</th>
-              <th className="py-2 pr-3 font-semibold">Omschrijving</th>
+              <SortTh label="Datum" sortKey="datum" active={sortKey} dir={sortDir} onSort={onSort} />
+              <SortTh label="Omschrijving" sortKey="omschrijving" active={sortKey} dir={sortDir} onSort={onSort} />
               <th className="py-2 pr-3 font-semibold">Categorie</th>
-              <th className="py-2 pr-3 font-semibold text-right">Bedrag</th>
+              <SortTh label="Bedrag" sortKey="bedrag" active={sortKey} dir={sortDir} onSort={onSort} align="right" />
               <th className="py-2 pr-3 font-semibold">Klasse</th>
               <th className="py-2 font-semibold">Project / post</th>
             </tr>
@@ -223,5 +239,38 @@ export function TriageTable({
         </table>
       </div>
     </div>
+  );
+}
+
+function SortTh({
+  label,
+  sortKey,
+  active,
+  dir,
+  onSort,
+  align,
+}: {
+  label: string;
+  sortKey: "datum" | "omschrijving" | "bedrag";
+  active: "datum" | "omschrijving" | "bedrag" | null;
+  dir: "asc" | "desc";
+  onSort: (key: "datum" | "omschrijving" | "bedrag") => void;
+  align?: "right";
+}) {
+  const isActive = active === sortKey;
+  return (
+    <th className={`py-2 pr-3 font-semibold ${align === "right" ? "text-right" : "text-left"}`}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex items-center gap-1 ${align === "right" ? "flex-row-reverse" : ""}`}
+        style={{ color: isActive ? "var(--color-ink)" : "var(--color-label)" }}
+      >
+        {label}
+        <span className="text-[10px]" style={{ opacity: isActive ? 1 : 0.3 }}>
+          {isActive && dir === "asc" ? "▲" : "▼"}
+        </span>
+      </button>
+    </th>
   );
 }
