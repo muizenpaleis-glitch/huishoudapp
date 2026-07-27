@@ -146,8 +146,29 @@ function maandenTussen(van: string, tot: string): number {
   return Math.max(dagen / 30.44, 1); // minimaal één maand, anders exploderen de tarieven
 }
 
+/** Het tijdvenster waarover alles gemeten wordt: de eerste tot de laatste
+ *  bezorging in de hele dataset.
+ *
+ *  Eerder rekende elk product over zijn eigen venster, en dat brak op twee
+ *  manieren. Een product dat één keer gekocht is kreeg een venster van
+ *  minimaal één maand, waardoor de volle prijs als maandlast telde — €17,98
+ *  opvolgmelk werd "€17,98 per maand". En twee producten die elk in een korte
+ *  periode vielen maar maanden uit elkaar lagen, kregen samengevoegd ineens een
+ *  veel breder venster: samenvoegen verlaagde dan de maanduitgave, waardoor een
+ *  groep uit de bulklijst kon vallen terwijl de leden er los in stonden.
+ *
+ *  Met één gedeeld venster zijn producten onderling vergelijkbaar en is
+ *  samenvoegen zuiver optellen. */
+export function meetVenster(regels: RegelRij[]): { eerste: string; laatste: string; maanden: number } {
+  const datums = regels.map((r) => r.bezorgdatum).sort();
+  const eerste = datums[0] ?? "";
+  const laatste = datums[datums.length - 1] ?? "";
+  return { eerste, laatste, maanden: eerste ? maandenTussen(eerste, laatste) : 1 };
+}
+
 export function productStats(regels: RegelRij[], overrides: ProductOverride[]): ProductStat[] {
   const ovr = new Map(overrides.map((o) => [o.sleutel, o]));
+  const venster = meetVenster(regels);
   const groepen = new Map<
     string,
     { naam: string; datums: Map<string, { stuks: number; bedrag: number }> }
@@ -173,7 +194,6 @@ export function productStats(regels: RegelRij[], overrides: ProductOverride[]): 
     const o = ovr.get(sleutel);
     const autoCat = categoriseerProduct(g.naam);
     const categorie = o?.categorie ?? autoCat;
-    const maanden = maandenTussen(eerste, laatste);
     uit.push({
       sleutel,
       naam: g.naam,
@@ -191,8 +211,8 @@ export function productStats(regels: RegelRij[], overrides: ProductOverride[]): 
       prijsPerStuk: stuks ? Math.round((totaal / stuks) * 100) / 100 : 0,
       eerste,
       laatste,
-      frequentiePerMaand: datums.length / maanden,
-      uitgavePerMaand: totaal / maanden,
+      frequentiePerMaand: datums.length / venster.maanden,
+      uitgavePerMaand: totaal / venster.maanden,
       prijsverloop: datums.map(([datum, d]) => ({
         datum,
         prijsPerStuk: d.stuks ? Math.round((d.bedrag / d.stuks) * 100) / 100 : 0,
@@ -202,14 +222,14 @@ export function productStats(regels: RegelRij[], overrides: ProductOverride[]): 
   return uit.sort((a, b) => b.totaal - a.totaal);
 }
 
-// Twee drempels in plaats van één. De lage drempel bepaalt wat in de lijst komt:
-// met een handvol bezorgingen zou één strenge grens een leeg paneel opleveren, en
-// daar heeft niemand iets aan. De hoge drempel markeert waar het patroon sterk
-// genoeg voor is om er echt naar te handelen.
+// Geen eurodrempel meer. Een vast bedrag per maand werkt niet: bij een handvol
+// bezorgingen valt alles eronder en bij een vol jaar staat hij weer te ruim, want
+// de uitkomst hangt af van hoeveel er is ingelezen. Het aantal bezorgingen waarin
+// iets terugkwam is wél een stabiel signaal — dat zegt "dit is een patroon" —
+// en het bedrag staat erbij zodat je zelf ziet of het de moeite waard is.
 export const BULK_MIN_KEER = 2;
-export const BULK_MIN_UITGAVE_PER_MAAND = 3;
 export const BULK_STERK_KEER = 3;
-export const BULK_STERK_UITGAVE_PER_MAAND = 8;
+export const BULK_MAX_RIJEN = 15;
 
 export type GroepStat = {
   groep: string;
@@ -240,18 +260,16 @@ export function groepStats(stats: ProductStat[]): GroepStat[] {
     const gesorteerd = [...leden].sort((a, b) => b.totaal - a.totaal);
     const datums = new Set<string>();
     for (const l of leden) for (const d of l.datums) datums.add(d);
-    const gesorteerdeDatums = [...datums].sort();
     const stuks = leden.reduce((s, l) => s + l.stuks, 0);
     const totaal = Math.round(leden.reduce((s, l) => s + l.totaal, 0) * 100) / 100;
-    const maanden = maandenTussen(
-      gesorteerdeDatums[0],
-      gesorteerdeDatums[gesorteerdeDatums.length - 1],
-    );
+    const handmatig = leden.some((l) => l.groepIsHandmatig);
     uit.push({
       groep,
-      naam: gesorteerd[0].naam,
+      // Een zelfgekozen groepnaam is de naam die jij eraan gaf; anders valt hij
+      // terug op de duurste variant, want die herken je het snelst terug.
+      naam: handmatig ? groep : gesorteerd[0].naam,
       varianten: leden.length,
-      handmatig: leden.some((l) => l.groepIsHandmatig),
+      handmatig,
       categorie: gesorteerd[0].categorie,
       // Eén variant die niet houdbaar is maakt de groep nog niet onhoudbaar;
       // andersom is één houdbare variant te weinig. De meerderheid beslist.
@@ -261,7 +279,8 @@ export function groepStats(stats: ProductStat[]): GroepStat[] {
       stuks,
       totaal,
       prijsPerStuk: stuks ? Math.round((totaal / stuks) * 100) / 100 : 0,
-      uitgavePerMaand: totaal / maanden,
+      // Alle leden delen hetzelfde meetvenster, dus samenvoegen is optellen.
+      uitgavePerMaand: leden.reduce((s, l) => s + l.uitgavePerMaand, 0),
       producten: gesorteerd,
     });
   }
@@ -277,19 +296,14 @@ export type BulkKandidaat = GroepStat & { besparingIndicatie: number; sterk: boo
  *  bulkkorting is hier niet bekend. */
 export function bulkKandidaten(groepen: GroepStat[]): BulkKandidaat[] {
   return groepen
-    .filter(
-      (g) =>
-        g.houdbaar &&
-        !g.bulkNegeren &&
-        g.keerGekocht >= BULK_MIN_KEER &&
-        g.uitgavePerMaand >= BULK_MIN_UITGAVE_PER_MAAND,
-    )
+    .filter((g) => g.houdbaar && !g.bulkNegeren && g.keerGekocht >= BULK_MIN_KEER)
     .map((g) => ({
       ...g,
       besparingIndicatie: (g.uitgavePerMaand * 12) / 10,
-      sterk: g.keerGekocht >= BULK_STERK_KEER && g.uitgavePerMaand >= BULK_STERK_UITGAVE_PER_MAAND,
+      sterk: g.keerGekocht >= BULK_STERK_KEER,
     }))
-    .sort((a, b) => Number(b.sterk) - Number(a.sterk) || b.uitgavePerMaand - a.uitgavePerMaand);
+    .sort((a, b) => Number(b.sterk) - Number(a.sterk) || b.uitgavePerMaand - a.uitgavePerMaand)
+    .slice(0, BULK_MAX_RIJEN);
 }
 
 export type MaandTotaal = { maand: string; bedrag: number; bezorgingen: number };

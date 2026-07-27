@@ -11,9 +11,8 @@ import {
   perCategorie,
   CATEGORIEEN,
   BULK_MIN_KEER,
-  BULK_MIN_UITGAVE_PER_MAAND,
   BULK_STERK_KEER,
-  BULK_STERK_UITGAVE_PER_MAAND,
+  BULK_MAX_RIJEN,
   type RegelRij,
   type ProductOverride,
   type ProductStat,
@@ -226,18 +225,18 @@ export function BoodschappenClient({
               </div>
               {bulk.length === 0 ? (
                 <div className="text-[12.5px] text-muted">
-                  Nog geen houdbaar product dat minstens {BULK_MIN_KEER} keer terugkwam en meer dan{" "}
-                  {fmtEUR0(BULK_MIN_UITGAVE_PER_MAAND)} per maand kost. Lees meer bonnetjes in en dit vult
-                  zich vanzelf.
+                  Nog geen houdbaar product dat in minstens {BULK_MIN_KEER} bezorgingen terugkwam. Lees
+                  meer bonnetjes in en dit vult zich vanzelf.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-[12.5px] border-collapse min-w-[640px]">
                     <thead>
                       <tr className="text-left text-label border-b border-divider">
-                        <th className="py-2 pr-3 font-semibold">Product</th>
-                        <th className="py-2 pr-3 font-semibold text-right">Keer gekocht</th>
+                        <th className="py-2 pr-3 font-semibold">Product of groep</th>
+                        <th className="py-2 pr-3 font-semibold text-right">Bezorgingen</th>
                         <th className="py-2 pr-3 font-semibold text-right">Per stuk</th>
+                        <th className="py-2 pr-3 font-semibold text-right">Totaal</th>
                         <th className="py-2 pr-3 font-semibold text-right">Per maand</th>
                         <th className="py-2 pr-3 font-semibold">Signaal</th>
                         <th className="py-2 font-semibold"></th>
@@ -246,31 +245,43 @@ export function BoodschappenClient({
                     <tbody>
                       {bulk.map((b) => (
                         <tr key={b.groep} className="border-b border-divider/60">
-                          <td className="py-1.5 pr-3">
-                            {b.naam}
+                          <td className="py-1.5 pr-3 align-top">
+                            <div>
+                              {b.naam}
+                              {b.handmatig && (
+                                <span className="text-[10.5px] text-accent align-super ml-1">
+                                  eigen groep
+                                </span>
+                              )}
+                              <span className="text-muted"> · {b.categorie}</span>
+                            </div>
                             {b.varianten > 1 && (
-                              <span
-                                className="text-muted"
-                                title={b.producten.map((p) => p.naam).join("\n")}
-                              >
-                                {" "}
-                                + {b.varianten - 1} variant{b.varianten > 2 ? "en" : ""}
-                                {b.handmatig ? " (eigen groep)" : ""}
-                              </span>
+                              <div className="text-[11px] text-muted mt-0.5 leading-snug">
+                                {b.producten
+                                  .slice(0, 4)
+                                  .map((p) => `${p.naam} (${fmtEUR0(p.totaal)})`)
+                                  .join(" · ")}
+                                {b.varianten > 4 && ` · nog ${b.varianten - 4}`}
+                              </div>
                             )}
-                            <span className="text-muted"> · {b.categorie}</span>
                           </td>
-                          <td className="py-1.5 pr-3 text-right">
+                          <td className="py-1.5 pr-3 text-right align-top">
                             {b.keerGekocht}× · {b.stuks} stuks
                           </td>
-                          <td className="py-1.5 pr-3 text-right">{fmtEUR0(b.prijsPerStuk)}</td>
-                          <td className="py-1.5 pr-3 text-right font-semibold">
+                          <td className="py-1.5 pr-3 text-right align-top">
+                            {fmtEUR0(b.prijsPerStuk)}
+                          </td>
+                          <td className="py-1.5 pr-3 text-right align-top">{fmtEUR0(b.totaal)}</td>
+                          <td className="py-1.5 pr-3 text-right font-semibold align-top">
                             {fmtEUR0(b.uitgavePerMaand)}
                           </td>
-                          <td className="py-1.5 pr-3" style={{ color: b.sterk ? "#5C7F55" : "var(--color-muted)" }}>
+                          <td
+                            className="py-1.5 pr-3 align-top"
+                            style={{ color: b.sterk ? "#5C7F55" : "var(--color-muted)" }}
+                          >
                             {b.sterk ? "duidelijk patroon" : "nog dun"}
                           </td>
-                          <td className="py-1.5 text-right hidden md:table-cell">
+                          <td className="py-1.5 text-right hidden md:table-cell align-top">
                             <button
                               onClick={() =>
                                 start(async () => {
@@ -295,11 +306,16 @@ Varianten van hetzelfde product worden samengeteld — smaken van een fruithapje
                 productnaam en vangt niet alles; hoort er iets bij dat er niet automatisch bij komt,
                 geef die producten dan dezelfde <b>groep</b> in de lijst hieronder.
                 <br />
-                In beeld komt elke houdbare groep die minstens {BULK_MIN_KEER} bezorgingen terugkwam en meer
-                dan {fmtEUR0(BULK_MIN_UITGAVE_PER_MAAND)} per maand kost. &ldquo;Duidelijk patroon&rdquo;
-                betekent minstens {BULK_STERK_KEER} keer en {fmtEUR0(BULK_STERK_UITGAVE_PER_MAAND)} per
-                maand — daar is het patroon sterk genoeg om op te handelen; de rest is een eerste indruk
-                die met meer bezorgingen hard wordt. Vers, gekoeld en diepvries vallen af; diepvries niet
+<b>Per maand</b> en <b>bezorgingen</b> slaan op de groep als geheel: drie smaken in
+                één bezorging is één bezorging, en het bedrag is de som. Alles wordt gemeten over
+                dezelfde periode — van je eerste tot je laatste bezorging — zodat producten onderling
+                vergelijkbaar zijn en samenvoegen niets verschuift behalve de optelling.
+                <br />
+                In beeld komt elke houdbare groep die in minstens {BULK_MIN_KEER} bezorgingen terugkwam,
+                de {BULK_MAX_RIJEN} grootste op maanduitgave. &ldquo;Duidelijk patroon&rdquo; betekent
+                minstens {BULK_STERK_KEER} bezorgingen — dan is het geen toeval meer. Er zit bewust geen
+                eurodrempel op: wat een bedrag per maand voorstelt hangt af van hoeveel je hebt ingelezen,
+                dus dat oordeel laat ik aan jou. Vers, gekoeld en diepvries vallen af; diepvries niet
                 omdat het bederft, maar omdat je vriezer de grens is.
               </div>
             </Card>
