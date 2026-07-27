@@ -1,9 +1,15 @@
 {
-  "regions": ["fra1"],
+  "regions": [
+    "fra1"
+  ],
   "crons": [
     {
       "path": "/api/notifications/check",
       "schedule": "43 7 * * *"
+    },
+    {
+      "path": "/api/boodschappen/sync",
+      "schedule": "17 8 * * *"
     }
   ]
 }

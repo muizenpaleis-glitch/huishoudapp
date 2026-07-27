@@ -378,3 +378,68 @@ model HuisFavoriet {
   key      String @unique // 'lamp:<id>' | 'laadpaal' | 'automatisering'
   volgorde Int    @default(0)
 }
+
+// ── Boodschappen (Picnic-bonnetjes) ────────────────────────────────────
+// Eén rij per ingelezen "Je bonnetje"-mail. Datums als 'YYYY-MM-DD'-string,
+// net als bij FinanceTx, zodat groeperen per maand een simpele prefix is.
+model BoodschapBon {
+  id          String   @id @default(cuid())
+  bron        String   @default("gmail") // 'gmail' | 'handmatig'
+  bronId      String   @unique // Gmail message-id, of een hash bij plakken
+  bezorgdatum String
+  subtotaal   Decimal? @db.Decimal(10, 2)
+  totaal      Decimal? @db.Decimal(10, 2)
+  statiegeld  Decimal  @db.Decimal(10, 2) @default(0)
+  ingeleverd  Decimal  @db.Decimal(10, 2) @default(0)
+  voordeel    Decimal  @db.Decimal(10, 2) @default(0)
+  tegoed      Decimal  @db.Decimal(10, 2) @default(0)
+  // False als een van de twee controlevergelijkingen niet uitkomt — dan is het
+  // mailformaat veranderd en zijn de bedragen niet te vertrouwen.
+  klopt       Boolean  @default(true)
+  ingelezenOp DateTime @default(now())
+
+  regels BoodschapRegel[]
+
+  @@index([bezorgdatum])
+}
+
+model BoodschapRegel {
+  id           String       @id @default(cuid())
+  bonId        String
+  bon          BoodschapBon @relation(fields: [bonId], references: [id], onDelete: Cascade)
+  ordernummer  String
+  productnaam  String
+  sleutel      String // genormaliseerde naam, groepeert hetzelfde product over bonnen heen
+  aantal       Int
+  prijs        Decimal      @db.Decimal(10, 2)
+  actielabel   String?
+  bundelTotaal Decimal?     @db.Decimal(10, 2) // gevuld als prijs een bundelaandeel is
+
+  @@index([bonId])
+  @@index([sleutel])
+}
+
+// Handmatige correcties per product. Leeg laten = automatisch afgeleid uit de
+// naam; een rij hier wint. Zelfde "leeg = afgeleid"-contract als bij Budgetteren.
+model BoodschapProduct {
+  sleutel     String   @id
+  categorie   String?
+  houdbaar    Boolean?
+  bulkNegeren Boolean  @default(false)
+  bijgewerkt  DateTime @updatedAt
+}
+
+// Gmail-koppeling voor het ophalen van bonnetjes. Los van de Calendar-koppeling:
+// die draait op een service-account, en een service-account kan geen persoonlijke
+// @gmail.com-mailbox lezen (domain-wide delegation bestaat alleen binnen een
+// Workspace-domein). Gmail heeft daarom een eigen OAuth-client met toestemming
+// van de gebruiker; het refresh-token daarvan staat hier zodat koppelen geen
+// nieuwe deploy vereist.
+model GmailKoppeling {
+  id           Int      @id @default(1)
+  refreshToken String
+  email        String?
+  gekoppeldOp  DateTime @default(now())
+  laatsteSync  DateTime?
+  laatsteFout  String?
+}

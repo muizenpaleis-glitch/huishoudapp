@@ -198,6 +198,13 @@ export function FinancienClient({
             Meerjarenplan
           </Link>
         </div>
+        {/* Boodschappen is vooral kijken, dus die blijft ook op mobiel bereikbaar. */}
+        <Link
+          href="/financien/boodschappen"
+          className="ml-auto md:ml-0 shrink-0 px-3.5 py-2 rounded-full border border-input-border text-[12.5px] font-semibold text-ink-soft"
+        >
+          Boodschappen
+        </Link>
       </div>
 
       <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-[1080px] w-full mx-auto">
