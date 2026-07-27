@@ -131,7 +131,7 @@ function plaintextUit(deel: GmailDeel | undefined): string | null {
   return null;
 }
 
-export type GmailBericht = { id: string; plaintext: string };
+export type GmailBericht = { id: string; plaintext: string; datum: Date };
 
 /** Haalt Picnic-mails op. `sinds` beperkt tot recente berichten voor de
  *  dagelijkse sync; weglaten haalt de hele historie op (de eenmalige import). */
@@ -170,9 +170,15 @@ export async function haalPicnicMails(sinds?: Date): Promise<GmailBericht[]> {
       { headers: auth, cache: "no-store" },
     );
     if (!res.ok) continue;
-    const msg = (await res.json()) as { payload?: GmailDeel };
+    const msg = (await res.json()) as { payload?: GmailDeel; internalDate?: string };
     const plaintext = plaintextUit(msg.payload);
-    if (plaintext) uit.push({ id, plaintext });
+    if (plaintext) {
+      uit.push({
+        id,
+        plaintext,
+        datum: msg.internalDate ? new Date(Number(msg.internalDate)) : new Date(),
+      });
+    }
   }
   return uit;
 }

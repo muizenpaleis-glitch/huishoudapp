@@ -78,6 +78,23 @@ export function isBonnetje(plaintext: string): boolean {
   return /Hier is het bonnetje bij je bezorging van/i.test(plaintext);
 }
 
+/** Wat voor Picnic-mail is dit? Zonder dit onderscheid belandt alles wat geen
+ *  bonnetje is op één hoop, en dan valt niet te zien of de parser iets mist of
+ *  dat het gewoon een bestelbevestiging was.
+ *
+ *  "anders" is bewust een korte, expliciete lijst van mailsoorten die we kennen
+ *  en niet nodig hebben. Alles daarbuiten wordt "onbekend" en komt in beeld —
+ *  liever een keer een loos signaal dan een bonnetje dat stil verdwijnt. */
+export function herkenMailsoort(plaintext: string): "bonnetje" | "anders" | "onbekend" {
+  if (isBonnetje(plaintext)) return "bonnetje";
+  const bekendGeenBonnetje = [
+    /Wat leuk dat we weer bij je langs mogen komen/i, // bestelbevestiging
+    /Bedankt voor je bestelling/i,
+    /Bedankt voor het inleveren van je pakketje/i, // retour-/pakketbevestiging
+  ];
+  return bekendGeenBonnetje.some((re) => re.test(plaintext)) ? "anders" : "onbekend";
+}
+
 function parseBedrag(raw: string): number | null {
   const m = raw.trim().match(/^([+-]?)\s*€?\s*(\d+)[.,](\d{2})$/);
   if (m) return (m[1] === "-" ? -1 : 1) * (parseInt(m[2], 10) + parseInt(m[3], 10) / 100);
@@ -86,7 +103,7 @@ function parseBedrag(raw: string): number | null {
   return null;
 }
 
-function parseBezorgdatum(plaintext: string): string | null {
+function parseBezorgdatum(plaintext: string, mailDatum?: Date): string | null {
   const m = plaintext.match(
     /Hier is het bonnetje bij je bezorging van\s+\w+\s+(\d{1,2})\s+([a-zA-Zé]+)\s*(\d{4})?/i,
   );
@@ -94,10 +111,18 @@ function parseBezorgdatum(plaintext: string): string | null {
   const dag = parseInt(m[1], 10);
   const maand = MAANDEN.indexOf(m[2].toLowerCase());
   if (maand < 0) return null;
-  // Het jaartal staat er in alle onderzochte mails bij; ontbreekt het toch, dan
-  // vult de aanroeper het aan met het jaar van de mail zelf.
-  const jaar = m[3] ? parseInt(m[3], 10) : null;
-  if (jaar == null) return null;
+  // Het jaartal stond in alle onderzochte mails in de datumregel, maar niet elk
+  // bonnetje hoeft dat te doen. Ontbreekt het, dan valt hij terug op het jaar van
+  // de mail zelf. Bij een bezorging begin januari is de mail van eind december
+  // verstuurd; dan hoort het jaar er één bij.
+  let jaar = m[3] ? parseInt(m[3], 10) : null;
+  if (jaar == null) {
+    if (!mailDatum) return null;
+    // Jaargrens: een bezorging in januari waarvan de mail in december verstuurd
+    // is, hoort bij het volgende jaar.
+    const overJaargrens = maand === 0 && mailDatum.getMonth() === 11;
+    jaar = mailDatum.getFullYear() + (overJaargrens ? 1 : 0);
+  }
   return `${jaar}-${String(maand + 1).padStart(2, "0")}-${String(dag).padStart(2, "0")}`;
 }
 
@@ -129,9 +154,9 @@ function bedragOnderSectie(regels: string[], kop: string): number | null {
   return null;
 }
 
-export function parsePicnicBonnetje(plaintext: string): Bonnetje | null {
+export function parsePicnicBonnetje(plaintext: string, mailDatum?: Date): Bonnetje | null {
   if (!isBonnetje(plaintext)) return null;
-  const bezorgdatum = parseBezorgdatum(plaintext);
+  const bezorgdatum = parseBezorgdatum(plaintext, mailDatum);
   if (!bezorgdatum) return null;
 
   const regels = plaintext.split(/\r?\n/);

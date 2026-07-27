@@ -16,6 +16,12 @@ export async function plakBonnetje(tekst: string): Promise<{ ok: boolean; meldin
   refresh();
   if (r === "nieuw") return { ok: true, melding: "Bonnetje toegevoegd." };
   if (r === "bestond") return { ok: true, melding: "Dit bonnetje stond er al in." };
+  if (r === "anders")
+    return {
+      ok: false,
+      melding:
+        "Dit is een bestelbevestiging, geen bonnetje. Daar staan nog geen productregels in — gebruik de 'Je bonnetje'-mail die ná de bezorging komt.",
+    };
   if (r === "te-oud")
     return {
       ok: false,
@@ -37,7 +43,12 @@ export async function syncNu(alles: boolean): Promise<{ ok: boolean; melding: st
     refresh();
     return {
       ok: true,
-      melding: `${r.gevonden} Picnic-mails bekeken · ${r.nieuw} nieuw · ${r.bestond} stond er al · ${r.geenBonnetje} geen bonnetje · ${r.teOud} van vóór ${EERSTE_JAAR}.`,
+      melding:
+        `${r.gevonden} Picnic-mails bekeken · ${r.nieuw} nieuw · ${r.bestond} stond er al · ` +
+        `${r.anders} bevestiging/overig · ${r.teOud} van vóór ${EERSTE_JAAR}` +
+        (r.onleesbaar
+          ? ` · ⚠ ${r.onleesbaar} onleesbaar (${r.onleesbareDatums.join(", ")})`
+          : " · 0 onleesbaar"),
     };
   } catch (e) {
     return { ok: false, melding: e instanceof Error ? e.message : String(e) };
