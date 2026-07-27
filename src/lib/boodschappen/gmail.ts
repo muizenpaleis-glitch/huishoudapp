@@ -98,6 +98,7 @@ export async function gmailStatus() {
     email: k?.email ?? null,
     laatsteSync: k?.laatsteSync ?? null,
     laatsteFout: k?.laatsteFout ?? null,
+    laatsteUitkomst: k?.laatsteUitkomst ?? null,
   };
 }
 
@@ -132,10 +133,18 @@ function plaintextUit(deel: GmailDeel | undefined): string | null {
 }
 
 export type GmailBericht = { id: string; plaintext: string; datum: Date };
+export type Ophaalresultaat = {
+  berichten: GmailBericht[];
+  totaalGevonden: number;
+  bekendOvergeslagen: number;
+};
 
 /** Haalt Picnic-mails op. `sinds` beperkt tot recente berichten voor de
  *  dagelijkse sync; weglaten haalt de hele historie op (de eenmalige import). */
-export async function haalPicnicMails(sinds?: Date): Promise<GmailBericht[]> {
+export async function haalPicnicMails(
+  sinds?: Date,
+  bekendeIds: Set<string> = new Set(),
+): Promise<Ophaalresultaat> {
   const token = await accessToken();
   const auth = { Authorization: `Bearer ${token}` };
   // `in:anywhere` is niet optioneel: de Gmail-zoekopdracht slaat prullenbak en
@@ -163,29 +172,43 @@ export async function haalPicnicMails(sinds?: Date): Promise<GmailBericht[]> {
     pageToken = data.nextPageToken;
   } while (pageToken);
 
+  // Berichten die al ingelezen zijn hoeven niet opnieuw opgehaald te worden. Het
+  // downloaden van de teksten is verreweg het traagste deel; dit maakt een tweede
+  // ronde vrijwel gratis en houdt hem binnen de tijdslimiet van de server.
+  const teHalen = ids.filter((id) => !bekendeIds.has(id));
+
   const uit: GmailBericht[] = [];
-  for (const id of ids) {
-    const res = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
-      { headers: auth, cache: "no-store" },
+  const BATCH = 8; // parallel, maar niet zo veel dat Gmail gaat knijpen
+  for (let i = 0; i < teHalen.length; i += BATCH) {
+    const groep = await Promise.all(
+      teHalen.slice(i, i + BATCH).map(async (id) => {
+        const res = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
+          { headers: auth, cache: "no-store" },
+        );
+        if (!res.ok) return null;
+        const msg = (await res.json()) as { payload?: GmailDeel; internalDate?: string };
+        const plaintext = plaintextUit(msg.payload);
+        if (!plaintext) return null;
+        return {
+          id,
+          plaintext,
+          datum: msg.internalDate ? new Date(Number(msg.internalDate)) : new Date(),
+        };
+      }),
     );
-    if (!res.ok) continue;
-    const msg = (await res.json()) as { payload?: GmailDeel; internalDate?: string };
-    const plaintext = plaintextUit(msg.payload);
-    if (plaintext) {
-      uit.push({
-        id,
-        plaintext,
-        datum: msg.internalDate ? new Date(Number(msg.internalDate)) : new Date(),
-      });
-    }
+    for (const b of groep) if (b) uit.push(b);
   }
-  return uit;
+  return { berichten: uit, totaalGevonden: ids.length, bekendOvergeslagen: ids.length - teHalen.length };
 }
 
-export async function noteerSync(fout?: string) {
+export async function noteerSync(uitkomst?: string, fout?: string) {
   await prisma.gmailKoppeling.updateMany({
     where: { id: 1 },
-    data: { laatsteSync: new Date(), laatsteFout: fout ?? null },
+    data: {
+      laatsteSync: new Date(),
+      laatsteFout: fout ?? null,
+      ...(uitkomst ? { laatsteUitkomst: uitkomst } : {}),
+    },
   });
 }

@@ -447,4 +447,8 @@ model GmailKoppeling {
   gekoppeldOp  DateTime @default(now())
   laatsteSync  DateTime?
   laatsteFout  String?
+  // Uitkomst van de laatste ronde, in tekst. Staat hier en niet alleen in de
+  // browser, zodat hij een herlaadbeurt of een afgebroken functie overleeft —
+  // precies de gevallen waarin je hem het hardst nodig hebt.
+  laatsteUitkomst String?
 }

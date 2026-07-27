@@ -74,13 +74,40 @@ export type SyncResultaat = {
   onleesbareDatums: string[];
 };
 
+/** Eén regel die zegt wat de ronde heeft gedaan. Staat zowel in de melding op het
+ *  scherm als in de database, zodat hij een herlaadbeurt overleeft. */
+export function vatSamen(r: SyncResultaat): string {
+  const delen = [
+    `${r.gevonden} Picnic-mails gevonden`,
+    `${r.nieuw} nieuw ingelezen`,
+    `${r.bestond} stond er al in`,
+    `${r.anders} bevestiging/overig`,
+    `${r.teOud} van vóór ${EERSTE_JAAR}`,
+  ];
+  delen.push(
+    r.onleesbaar
+      ? `⚠ ${r.onleesbaar} onleesbaar (${r.onleesbareDatums.join(", ")})`
+      : "0 onleesbaar",
+  );
+  return delen.join(" · ");
+}
+
 /** Haalt Picnic-mails op en verwerkt ze. Zonder `sinds` is dit de eenmalige
  *  historische import; met `sinds` de dagelijkse ronde. */
 export async function syncVanGmail(sinds?: Date): Promise<SyncResultaat> {
   try {
-    const mails = await haalPicnicMails(sinds);
+    // Wat er al in staat hoeft niet opnieuw opgehaald te worden.
+    const bekend = new Set(
+      (
+        await prisma.boodschapBon.findMany({
+          where: { bron: "gmail" },
+          select: { bronId: true },
+        })
+      ).map((b) => b.bronId),
+    );
+    const { berichten, totaalGevonden, bekendOvergeslagen } = await haalPicnicMails(sinds, bekend);
     const uit: SyncResultaat = {
-      gevonden: mails.length,
+      gevonden: totaalGevonden,
       nieuw: 0,
       bestond: 0,
       anders: 0,
@@ -88,7 +115,8 @@ export async function syncVanGmail(sinds?: Date): Promise<SyncResultaat> {
       teOud: 0,
       onleesbareDatums: [],
     };
-    for (const m of mails) {
+    uit.bestond = bekendOvergeslagen;
+    for (const m of berichten) {
       const r = await bewaarBonnetje("gmail", m.id, m.plaintext, m.datum);
       if (r === "nieuw") uit.nieuw++;
       else if (r === "bestond") uit.bestond++;
@@ -101,10 +129,11 @@ export async function syncVanGmail(sinds?: Date): Promise<SyncResultaat> {
         }
       }
     }
-    await noteerSync();
+    await noteerSync(vatSamen(uit));
     return uit;
   } catch (e) {
-    await noteerSync(e instanceof Error ? e.message : String(e));
+    const melding = e instanceof Error ? e.message : String(e);
+    await noteerSync(`Mislukt: ${melding}`, melding);
     throw e;
   }
 }

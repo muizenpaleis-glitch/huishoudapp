@@ -37,6 +37,7 @@ type GmailStatus = {
   email: string | null;
   laatsteSync: string | null;
   laatsteFout: string | null;
+  laatsteUitkomst: string | null;
 };
 
 const MAANDNAMEN = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
@@ -84,17 +85,33 @@ export function BoodschappenClient({
 
   async function doePlak() {
     setBezig(true);
-    const r = await plakBonnetje(plaktekst);
-    setMelding(r.melding);
-    if (r.ok) setPlaktekst("");
-    setBezig(false);
+    try {
+      const r = await plakBonnetje(plaktekst);
+      setMelding(r.melding);
+      if (r.ok) setPlaktekst("");
+    } catch (e) {
+      setMelding(`Er ging iets mis bij het verwerken: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setBezig(false);
+    }
   }
   async function doeSync(alles: boolean) {
     setBezig(true);
     setMelding("Bezig met ophalen…");
-    const r = await syncNu(alles);
-    setMelding(r.melding);
-    setBezig(false);
+    try {
+      const r = await syncNu(alles);
+      setMelding(r.melding);
+    } catch {
+      // Breekt de server de aanvraag af (tijdslimiet), dan komt er geen antwoord
+      // terug. Zwijgen zou lijken alsof er niets gebeurd is, terwijl de ronde
+      // wél bonnetjes heeft weggeschreven.
+      setMelding(
+        "De ronde werd afgebroken voordat hij klaar was — waarschijnlijk de tijdslimiet van de server. " +
+          "Wat al ingelezen was, is bewaard. Klik nog een keer: hij slaat over wat er al in staat.",
+      );
+    } finally {
+      setBezig(false);
+    }
   }
 
   const maxMaand = Math.max(1, ...maanden.map((m) => m.bedrag));
@@ -380,9 +397,14 @@ Varianten van hetzelfde product worden samengeteld — smaken van een fruithapje
                     Ontkoppelen
                   </button>
                 </div>
-                {melding && (
+                {(melding || gmail.laatsteUitkomst) && (
                   <div className="text-[12.5px] text-ink-soft border-t border-divider pt-2">
-                    {melding}
+                    {melding ?? (
+                      <>
+                        <span className="text-muted">Laatste ronde: </span>
+                        {gmail.laatsteUitkomst}
+                      </>
+                    )}
                   </div>
                 )}
                 <div className="text-[11.5px] text-muted">

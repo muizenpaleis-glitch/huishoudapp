@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { bewaarGeplakt, syncVanGmail, type SyncResultaat } from "@/lib/boodschappen/ingest";
+import { bewaarGeplakt, syncVanGmail, vatSamen } from "@/lib/boodschappen/ingest";
 import { ontkoppel } from "@/lib/boodschappen/gmail";
 import { EERSTE_JAAR } from "@/lib/boodschappen/engine";
 
@@ -39,17 +39,9 @@ export async function syncNu(alles: boolean): Promise<{ ok: boolean; melding: st
     // Zonder datumgrens haalt hij de hele historie op; de dagelijkse ronde kijkt
     // 30 dagen terug, ruim genoeg omdat bonnetjes na bezorging komen.
     const sinds = alles ? undefined : new Date(Date.now() - 30 * 86400000);
-    const r: SyncResultaat = await syncVanGmail(sinds);
+    const r = await syncVanGmail(sinds);
     refresh();
-    return {
-      ok: true,
-      melding:
-        `${r.gevonden} Picnic-mails bekeken · ${r.nieuw} nieuw · ${r.bestond} stond er al · ` +
-        `${r.anders} bevestiging/overig · ${r.teOud} van vóór ${EERSTE_JAAR}` +
-        (r.onleesbaar
-          ? ` · ⚠ ${r.onleesbaar} onleesbaar (${r.onleesbareDatums.join(", ")})`
-          : " · 0 onleesbaar"),
-    };
+    return { ok: true, melding: vatSamen(r) };
   } catch (e) {
     return { ok: false, melding: e instanceof Error ? e.message : String(e) };
   }
