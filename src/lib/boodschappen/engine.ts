@@ -2,6 +2,11 @@
 // acties leveren rauwe rijen aan en lezen berekende uitkomsten terug, net als
 // bij de financiënmodule.
 
+// De module kijkt naar hetzelfde jaar als Financiën. Ouder materiaal is er wel
+// (Picnic mailt al sinds 2025), maar zou de maandgrafieken en de bulkfrequenties
+// vertekenen met een periode waarvoor geen begroting bestaat.
+export { PROJECTION_START_YEAR as EERSTE_JAAR } from "@/lib/finance/engine";
+
 export type RegelRij = {
   bezorgdatum: string; // 'YYYY-MM-DD'
   productnaam: string;

@@ -2,10 +2,10 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { parsePicnicBonnetje } from "./picnic";
-import { productSleutel } from "./engine";
+import { productSleutel, EERSTE_JAAR } from "./engine";
 import { haalPicnicMails, noteerSync } from "./gmail";
 
-export type Uitkomst = "nieuw" | "bestond" | "geen-bonnetje";
+export type Uitkomst = "nieuw" | "bestond" | "geen-bonnetje" | "te-oud";
 
 /** Slaat één bonnetje op. `bronId` maakt het idempotent: opnieuw synchroniseren
  *  of dezelfde mail nog eens plakken levert geen dubbele bestelling op. */
@@ -16,6 +16,9 @@ export async function bewaarBonnetje(
 ): Promise<Uitkomst> {
   const bon = parsePicnicBonnetje(plaintext);
   if (!bon) return "geen-bonnetje";
+  // Grens op de bezorgdatum, niet op de datum van de mail: een bezorging van
+  // begin januari hoort bij dit jaar, ook als het bonnetje in december verstuurd is.
+  if (parseInt(bon.bezorgdatum.slice(0, 4), 10) < EERSTE_JAAR) return "te-oud";
 
   const bestaat = await prisma.boodschapBon.findUnique({ where: { bronId } });
   if (bestaat) return "bestond";
@@ -60,6 +63,7 @@ export type SyncResultaat = {
   nieuw: number;
   bestond: number;
   geenBonnetje: number;
+  teOud: number;
 };
 
 /** Haalt Picnic-mails op en verwerkt ze. Zonder `sinds` is dit de eenmalige
@@ -67,11 +71,14 @@ export type SyncResultaat = {
 export async function syncVanGmail(sinds?: Date): Promise<SyncResultaat> {
   try {
     const mails = await haalPicnicMails(sinds);
-    const uit: SyncResultaat = { gevonden: mails.length, nieuw: 0, bestond: 0, geenBonnetje: 0 };
+    const uit: SyncResultaat = {
+      gevonden: mails.length, nieuw: 0, bestond: 0, geenBonnetje: 0, teOud: 0,
+    };
     for (const m of mails) {
       const r = await bewaarBonnetje("gmail", m.id, m.plaintext);
       if (r === "nieuw") uit.nieuw++;
       else if (r === "bestond") uit.bestond++;
+      else if (r === "te-oud") uit.teOud++;
       else uit.geenBonnetje++; // o.a. "Bedankt voor je bestelling!" — bewust genegeerd
     }
     await noteerSync();

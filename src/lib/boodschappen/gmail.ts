@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { EERSTE_JAAR } from "./engine";
 
 // Gmail-toegang voor de boodschappenmodule.
 //
@@ -140,8 +141,13 @@ export async function haalPicnicMails(sinds?: Date): Promise<GmailBericht[]> {
   // `in:anywhere` is niet optioneel: de Gmail-zoekopdracht slaat prullenbak en
   // spam standaard over, en bonnetjes belanden bij een opgeruimde mailbox juist
   // daar. Zonder dit mist de import het overgrote deel van de historie.
-  let query = `from:${AFZENDER} in:anywhere`;
-  if (sinds) query += ` after:${sinds.toISOString().slice(0, 10).replace(/-/g, "/")}`;
+  // Ondergrens: de module kijkt naar hetzelfde jaar als Financiën. Een paar dagen
+  // speling omdat het bonnetje van een bezorging begin januari eind december
+  // verstuurd kan zijn — de definitieve grens ligt op de bezorgdatum bij ingest.
+  const vanaf = sinds && sinds > new Date(`${EERSTE_JAAR - 1}-12-20`)
+    ? sinds
+    : new Date(`${EERSTE_JAAR - 1}-12-20`);
+  const query = `from:${AFZENDER} in:anywhere after:${vanaf.toISOString().slice(0, 10).replace(/-/g, "/")}`;
 
   const ids: string[] = [];
   let pageToken: string | undefined;
