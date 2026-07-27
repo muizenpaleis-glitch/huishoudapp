@@ -137,7 +137,10 @@ export type GmailBericht = { id: string; plaintext: string };
 export async function haalPicnicMails(sinds?: Date): Promise<GmailBericht[]> {
   const token = await accessToken();
   const auth = { Authorization: `Bearer ${token}` };
-  let query = `from:${AFZENDER}`;
+  // `in:anywhere` is niet optioneel: de Gmail-zoekopdracht slaat prullenbak en
+  // spam standaard over, en bonnetjes belanden bij een opgeruimde mailbox juist
+  // daar. Zonder dit mist de import het overgrote deel van de historie.
+  let query = `from:${AFZENDER} in:anywhere`;
   if (sinds) query += ` after:${sinds.toISOString().slice(0, 10).replace(/-/g, "/")}`;
 
   const ids: string[] = [];
