@@ -423,6 +423,11 @@ model BoodschapRegel {
 // naam; een rij hier wint. Zelfde "leeg = afgeleid"-contract als bij Budgetteren.
 model BoodschapProduct {
   sleutel     String   @id
+  // Handmatige productgroep. Automatisch groeperen op naam haalt varianten van
+  // hetzelfde product samen (smaken, stuks/rollen), maar niet alles: alleen het
+  // huishouden weet dat twee verschillende Olvarit-maaltijden onderling
+  // uitwisselbaar zijn. Een naam hier wint van de automatische groep.
+  groep       String?
   categorie   String?
   houdbaar    Boolean?
   bulkNegeren Boolean  @default(false)

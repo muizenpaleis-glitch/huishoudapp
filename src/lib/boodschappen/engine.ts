@@ -18,6 +18,7 @@ export type RegelRij = {
 
 export type ProductOverride = {
   sleutel: string;
+  groep: string | null;
   categorie: string | null;
   houdbaar: boolean | null;
   bulkNegeren: boolean;
@@ -86,9 +87,39 @@ export function productSleutel(naam: string): string {
     .trim();
 }
 
+// Eenheden die hetzelfde betekenen maar anders geschreven worden. Picnic wisselt
+// hier zelf tussen ("9 rollen" werd later "9 stuks"), waardoor één product als
+// twee producten in de lijst belandde.
+const EENHEDEN: [RegExp, string][] = [
+  [/\b(rollen|rol|stuks|stuk|st)\b/g, "stuks"],
+  [/\b(gram|gr)\b/g, "gram"],
+  [/\b(liter|ltr)\b/g, "liter"],
+];
+
+// Smaak- en ingrediëntwoorden. Twee fruithapjes met een andere smaak zijn voor
+// de vraag "kan dit in bulk" hetzelfde product; het formaat blijft wél staan,
+// want 1 liter en 2 liter melk hebben een andere prijs per liter.
+const SMAAKWOORDEN =
+  /\b(appel|peer|peren|perzik|mango|framboos|banaan|bosbes|bes|bessen|aardbei|abrikoos|pompoen|kip|rund|aardappel|wortel|courgette|witvis|spinazie|tomaat|linzen|bolognese|vanille|naturel|kokos|kokosmelk|gierst|rogge|biet|paarse|zoete|spelt|amandel|speculaas|hazelnoot|karamel|citroen|sinaasappel|kers|pruim|yoghurt|ham|macaroni|curry|stoof|nuts|seeds|4 nuts)\b/g;
+
+/** Grovere sleutel dan productSleutel: vat varianten van hetzelfde product
+ *  samen. Haalt lang niet alles binnen — twee verschillende Olvarit-maaltijden
+ *  blijven apart — vandaar dat een handmatige groep hiervan wint. */
+export function productFamilie(naam: string): string {
+  let n = naam.toLowerCase().replace(/[•·]/g, " ").replace(/[^a-z0-9à-ÿ ]/gi, " ");
+  for (const [re, vv] of EENHEDEN) n = n.replace(re, vv);
+  n = n.replace(SMAAKWOORDEN, " ");
+  return n.replace(/\s+/g, " ").trim() || productSleutel(naam);
+}
+
 export type ProductStat = {
   sleutel: string;
   naam: string;
+  /** Groep waarin dit product voor bulkdoeleinden meetelt. */
+  groep: string;
+  groepIsHandmatig: boolean;
+  /** Bezorgdatums waarop dit product voorkwam. */
+  datums: string[];
   categorie: string;
   categorieIsHandmatig: boolean;
   houdbaar: boolean;
@@ -146,6 +177,9 @@ export function productStats(regels: RegelRij[], overrides: ProductOverride[]): 
     uit.push({
       sleutel,
       naam: g.naam,
+      groep: o?.groep?.trim() || productFamilie(g.naam),
+      groepIsHandmatig: !!o?.groep?.trim(),
+      datums: datums.map(([d]) => d),
       categorie,
       categorieIsHandmatig: o?.categorie != null,
       houdbaar: o?.houdbaar ?? isHoudbaar(categorie),
@@ -177,25 +211,83 @@ export const BULK_MIN_UITGAVE_PER_MAAND = 3;
 export const BULK_STERK_KEER = 3;
 export const BULK_STERK_UITGAVE_PER_MAAND = 8;
 
-export type BulkKandidaat = ProductStat & { besparingIndicatie: number; sterk: boolean };
+export type GroepStat = {
+  groep: string;
+  /** Weergavenaam: de duurste variant, want die herken je het snelst terug. */
+  naam: string;
+  varianten: number;
+  handmatig: boolean;
+  categorie: string;
+  houdbaar: boolean;
+  bulkNegeren: boolean;
+  keerGekocht: number; // aantal bezorgingen waarin de groep voorkwam
+  stuks: number;
+  totaal: number;
+  prijsPerStuk: number;
+  uitgavePerMaand: number;
+  producten: ProductStat[];
+};
 
-/** Houdbare producten die terugkomen, met de grootste maanduitgave bovenaan.
+/** Vat producten samen tot groepen. Bulkinkoop gaat over "koop ik dit vaak",
+ *  en dan tellen tien smaken fruithapjes als één ding — niet als tien losse
+ *  producten die elk net onder de drempel blijven. */
+export function groepStats(stats: ProductStat[]): GroepStat[] {
+  const m = new Map<string, ProductStat[]>();
+  for (const s of stats) (m.get(s.groep) ?? m.set(s.groep, []).get(s.groep)!).push(s);
+
+  const uit: GroepStat[] = [];
+  for (const [groep, leden] of m) {
+    const gesorteerd = [...leden].sort((a, b) => b.totaal - a.totaal);
+    const datums = new Set<string>();
+    for (const l of leden) for (const d of l.datums) datums.add(d);
+    const gesorteerdeDatums = [...datums].sort();
+    const stuks = leden.reduce((s, l) => s + l.stuks, 0);
+    const totaal = Math.round(leden.reduce((s, l) => s + l.totaal, 0) * 100) / 100;
+    const maanden = maandenTussen(
+      gesorteerdeDatums[0],
+      gesorteerdeDatums[gesorteerdeDatums.length - 1],
+    );
+    uit.push({
+      groep,
+      naam: gesorteerd[0].naam,
+      varianten: leden.length,
+      handmatig: leden.some((l) => l.groepIsHandmatig),
+      categorie: gesorteerd[0].categorie,
+      // Eén variant die niet houdbaar is maakt de groep nog niet onhoudbaar;
+      // andersom is één houdbare variant te weinig. De meerderheid beslist.
+      houdbaar: leden.filter((l) => l.houdbaar).length * 2 >= leden.length,
+      bulkNegeren: leden.every((l) => l.bulkNegeren),
+      keerGekocht: datums.size,
+      stuks,
+      totaal,
+      prijsPerStuk: stuks ? Math.round((totaal / stuks) * 100) / 100 : 0,
+      uitgavePerMaand: totaal / maanden,
+      producten: gesorteerd,
+    });
+  }
+  return uit.sort((a, b) => b.totaal - a.totaal);
+}
+
+
+export type BulkKandidaat = GroepStat & { besparingIndicatie: number; sterk: boolean };
+
+/** Houdbare productgroepen die terugkomen, met de grootste maanduitgave bovenaan.
  *  `besparingIndicatie` is bewust ruw: 10% van de jaaruitgave, als grootteorde om
  *  te bepalen wat het aankijken waard is — geen belofte, want de werkelijke
  *  bulkkorting is hier niet bekend. */
-export function bulkKandidaten(stats: ProductStat[]): BulkKandidaat[] {
-  return stats
+export function bulkKandidaten(groepen: GroepStat[]): BulkKandidaat[] {
+  return groepen
     .filter(
-      (s) =>
-        s.houdbaar &&
-        !s.bulkNegeren &&
-        s.keerGekocht >= BULK_MIN_KEER &&
-        s.uitgavePerMaand >= BULK_MIN_UITGAVE_PER_MAAND,
+      (g) =>
+        g.houdbaar &&
+        !g.bulkNegeren &&
+        g.keerGekocht >= BULK_MIN_KEER &&
+        g.uitgavePerMaand >= BULK_MIN_UITGAVE_PER_MAAND,
     )
-    .map((s) => ({
-      ...s,
-      besparingIndicatie: (s.uitgavePerMaand * 12) / 10,
-      sterk: s.keerGekocht >= BULK_STERK_KEER && s.uitgavePerMaand >= BULK_STERK_UITGAVE_PER_MAAND,
+    .map((g) => ({
+      ...g,
+      besparingIndicatie: (g.uitgavePerMaand * 12) / 10,
+      sterk: g.keerGekocht >= BULK_STERK_KEER && g.uitgavePerMaand >= BULK_STERK_UITGAVE_PER_MAAND,
     }))
     .sort((a, b) => Number(b.sterk) - Number(a.sterk) || b.uitgavePerMaand - a.uitgavePerMaand);
 }

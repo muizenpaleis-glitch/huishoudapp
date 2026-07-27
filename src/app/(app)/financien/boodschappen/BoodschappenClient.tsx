@@ -5,6 +5,7 @@ import { BackButton, Card } from "@/components/ui";
 import { fmtEUR0 } from "@/lib/finance/format";
 import {
   productStats,
+  groepStats,
   bulkKandidaten,
   perMaand,
   perCategorie,
@@ -24,6 +25,7 @@ import {
   syncNu,
   ontkoppelGmail,
   verwijderBon,
+  setProductGroep,
   setProductCategorie,
   setProductHoudbaar,
   setBulkNegeren,
@@ -63,7 +65,8 @@ export function BoodschappenClient({
   const [bezig, setBezig] = useState(false);
 
   const stats = useMemo(() => productStats(regels, overrides), [regels, overrides]);
-  const bulk = useMemo(() => bulkKandidaten(stats), [stats]);
+  const groepen = useMemo(() => groepStats(stats), [stats]);
+  const bulk = useMemo(() => bulkKandidaten(groepen), [groepen]);
   const maanden = useMemo(() => perMaand(regels, bonnen), [regels, bonnen]);
   const categorieen = useMemo(() => perCategorie(stats), [stats]);
 
@@ -225,9 +228,19 @@ export function BoodschappenClient({
                     </thead>
                     <tbody>
                       {bulk.map((b) => (
-                        <tr key={b.sleutel} className="border-b border-divider/60">
+                        <tr key={b.groep} className="border-b border-divider/60">
                           <td className="py-1.5 pr-3">
                             {b.naam}
+                            {b.varianten > 1 && (
+                              <span
+                                className="text-muted"
+                                title={b.producten.map((p) => p.naam).join("\n")}
+                              >
+                                {" "}
+                                + {b.varianten - 1} variant{b.varianten > 2 ? "en" : ""}
+                                {b.handmatig ? " (eigen groep)" : ""}
+                              </span>
+                            )}
                             <span className="text-muted"> · {b.categorie}</span>
                           </td>
                           <td className="py-1.5 pr-3 text-right">
@@ -242,7 +255,11 @@ export function BoodschappenClient({
                           </td>
                           <td className="py-1.5 text-right hidden md:table-cell">
                             <button
-                              onClick={() => start(() => setBulkNegeren(b.sleutel, true))}
+                              onClick={() =>
+                                start(async () => {
+                                  for (const p of b.producten) await setBulkNegeren(p.sleutel, true);
+                                })
+                              }
                               className="px-2.5 py-1 rounded-full border border-input-border text-[11.5px] font-semibold text-ink-soft whitespace-nowrap"
                               title="Niet meer voorstellen voor bulk"
                             >
@@ -256,7 +273,12 @@ export function BoodschappenClient({
                 </div>
               )}
               <div className="text-[11.5px] text-muted leading-relaxed">
-In beeld komt elk houdbaar product dat minstens {BULK_MIN_KEER} bezorgingen terugkwam en meer
+Varianten van hetzelfde product worden samengeteld — smaken van een fruithapje,
+                of &ldquo;9 rollen&rdquo; en &ldquo;9 stuks&rdquo; van hetzelfde pak. Dat gaat automatisch op de
+                productnaam en vangt niet alles; hoort er iets bij dat er niet automatisch bij komt,
+                geef die producten dan dezelfde <b>groep</b> in de lijst hieronder.
+                <br />
+                In beeld komt elke houdbare groep die minstens {BULK_MIN_KEER} bezorgingen terugkwam en meer
                 dan {fmtEUR0(BULK_MIN_UITGAVE_PER_MAAND)} per maand kost. &ldquo;Duidelijk patroon&rdquo;
                 betekent minstens {BULK_STERK_KEER} keer en {fmtEUR0(BULK_STERK_UITGAVE_PER_MAAND)} per
                 maand — daar is het patroon sterk genoeg om op te handelen; de rest is een eerste indruk
@@ -286,6 +308,7 @@ In beeld komt elk houdbaar product dat minstens {BULK_MIN_KEER} bezorgingen teru
                       <th className="py-2 pr-3 font-semibold text-right">Gekocht</th>
                       <th className="py-2 pr-3 font-semibold text-right">Per stuk</th>
                       <th className="py-2 pr-3 font-semibold text-right">Totaal</th>
+                      <th className="py-2 pr-3 font-semibold">Groep</th>
                       <th className="py-2 pr-3 font-semibold">Categorie</th>
                       <th className="py-2 font-semibold">Houdbaar</th>
                     </tr>
@@ -301,7 +324,9 @@ In beeld komt elk houdbaar product dat minstens {BULK_MIN_KEER} bezorgingen teru
                 {zoek
                   ? `${zichtbaar.length} van ${stats.length} producten`
                   : `De ${zichtbaar.length} duurste van ${stats.length} producten — zoek hierboven voor de rest.`}{" "}
-                Prijs per stuk is het gemiddelde over alle bezorgingen.
+                Prijs per stuk is het gemiddelde over alle bezorgingen. Geef twee producten dezelfde{" "}
+                <b>groep</b> om ze in de bulklijst als één post te behandelen; leeg laten betekent
+                automatisch bepaald (de grijze tekst toont welke groep dat is).
               </div>
             </Card>
           </>
@@ -355,6 +380,11 @@ In beeld komt elk houdbaar product dat minstens {BULK_MIN_KEER} bezorgingen teru
                     Ontkoppelen
                   </button>
                 </div>
+                {melding && (
+                  <div className="text-[12.5px] text-ink-soft border-t border-divider pt-2">
+                    {melding}
+                  </div>
+                )}
                 <div className="text-[11.5px] text-muted">
                   Er draait ook elke ochtend een automatische ronde. Alleen mails van Picnic worden
                   gelezen; bestelbevestigingen worden overgeslagen omdat daar nog geen productregels in
@@ -469,6 +499,23 @@ function ProductRij({ s, onStart }: { s: ProductStat; onStart: (fn: () => void) 
       </td>
       <td className="py-1.5 pr-3 text-right">{fmtEUR0(s.prijsPerStuk)}</td>
       <td className="py-1.5 pr-3 text-right font-semibold">{fmtEUR0(s.totaal)}</td>
+      <td className="py-1.5 pr-3">
+        <input
+          key={`${s.sleutel}-groep`}
+          defaultValue={s.groepIsHandmatig ? s.groep : ""}
+          placeholder={s.groep}
+          onBlur={(e) => {
+            const v = e.target.value.trim();
+            if (v === (s.groepIsHandmatig ? s.groep : "")) return;
+            onStart(() => setProductGroep(s.sleutel, v || null));
+          }}
+          title="Producten met dezelfde groep tellen samen in de bulklijst. Leeg = automatisch bepaald."
+          className="w-40 px-2 py-1 rounded-lg border bg-card text-[12px]"
+          style={{
+            borderColor: s.groepIsHandmatig ? "var(--color-accent)" : "var(--color-input-border)",
+          }}
+        />
+      </td>
       <td className="py-1.5 pr-3">
         <select
           value={s.categorie}

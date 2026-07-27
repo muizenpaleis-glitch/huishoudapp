@@ -55,6 +55,7 @@ export default async function BoodschappenPage({
 
   const overrides: ProductOverride[] = productRows.map((p) => ({
     sleutel: p.sleutel,
+    groep: p.groep,
     categorie: p.categorie,
     houdbaar: p.houdbaar,
     bulkNegeren: p.bulkNegeren,

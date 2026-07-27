@@ -76,6 +76,17 @@ export async function setProductCategorie(sleutel: string, categorie: string | n
   refresh();
 }
 
+export async function setProductGroep(sleutel: string, groep: string | null) {
+  const schoon = groep?.trim() || null;
+  await prisma.boodschapProduct.upsert({
+    where: { sleutel },
+    update: { groep: schoon },
+    create: { sleutel, groep: schoon },
+  });
+  await ruimLegeOverrideOp(sleutel);
+  refresh();
+}
+
 export async function setProductHoudbaar(sleutel: string, houdbaar: boolean | null) {
   await prisma.boodschapProduct.upsert({
     where: { sleutel },
@@ -100,7 +111,7 @@ export async function setBulkNegeren(sleutel: string, negeren: boolean) {
  *  "handmatig"-markering hangen op een product dat gewoon de afleiding volgt. */
 async function ruimLegeOverrideOp(sleutel: string) {
   const r = await prisma.boodschapProduct.findUnique({ where: { sleutel } });
-  if (r && r.categorie == null && r.houdbaar == null && !r.bulkNegeren) {
+  if (r && r.groep == null && r.categorie == null && r.houdbaar == null && !r.bulkNegeren) {
     await prisma.boodschapProduct.delete({ where: { sleutel } });
   }
 }
