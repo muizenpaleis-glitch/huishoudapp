@@ -452,3 +452,48 @@ model GmailKoppeling {
   // precies de gevallen waarin je hem het hardst nodig hebt.
   laatsteUitkomst String?
 }
+
+// ───────────────────────── Leningen ─────────────────────────
+// Eén rij per leningdeel. Een hypotheek met twee delen is dus twee rijen met
+// dezelfde `groep`; twee duurzaamheidsleningen voor hetzelfde doel ook.
+//
+// De bedragen die de bank rapporteert (restant, maandlasten) worden opgeslagen
+// zoals ze zijn en nooit door een berekening overschreven. Het aflosschema wordt
+// erbij gesimuleerd; wijkt de simulatie af van het gerapporteerde restant, dan
+// meldt de app dat in plaats van stilzwijgend een eigen waarheid te tonen.
+model Lening {
+  id            String   @id @default(cuid())
+  naam          String
+  groep         String // 'Hypotheek', 'Zonnepanelen', 'Warmtepomp'
+  leningnummer  String?
+  verstrekker   String?
+  vorm          String   @default("annuiteit") // 'annuiteit' | 'lineair' | 'aflossingsvrij'
+  hoofdsom      Decimal  @db.Decimal(12, 2)
+  rente         Decimal  @db.Decimal(6, 3) // %/jaar
+  startdatum    String // 'YYYY-MM-DD'
+  looptijdMnd   Int
+  // Wat de bank meldt op de peildatum. Het anker waartegen de simulatie afgezet wordt.
+  peildatum     String
+  restant       Decimal  @db.Decimal(12, 2)
+  maandTotaal   Decimal? @db.Decimal(10, 2)
+  maandRente    Decimal? @db.Decimal(10, 2)
+  maandAflossing Decimal? @db.Decimal(10, 2)
+  // Rente die tot de peildatum betaald is, als je dat uit de jaaropgaven weet.
+  // Leeg = de app leidt het af uit het schema, wat alleen klopt als de rente
+  // sinds de start niet gewijzigd is.
+  renteBetaald  Decimal? @db.Decimal(12, 2)
+  aftrekbaar    Boolean  @default(true)
+  notitie       String?
+  volgorde      Int      @default(0)
+}
+
+model LeningInstellingen {
+  id                 Int     @id @default(1)
+  // Tarief waartegen hypotheekrente in box 1 aftrekbaar is. Sinds 2023 gelijk
+  // aan het tarief van de eerste schijf en jaarlijks iets anders, dus instelbaar.
+  aftrekPercentage   Decimal @db.Decimal(5, 2) @default(37.48)
+  // Eigenwoningforfait per jaar: een bijtelling bij je inkomen die het voordeel
+  // van de aftrek verkleint. Hoort bij de woning, niet bij een lening, dus staat
+  // hier los. 0 = niet meerekenen.
+  eigenwoningforfait Decimal @db.Decimal(10, 2) @default(0)
+}
